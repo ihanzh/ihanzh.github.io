@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>QEMU vhost-vdpa Shadow Virtqueue 详解 | Hexo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="QEMU vhost-vdpa Shadow Virtqueue 详解Shadow Virtqueue（SVQ）是 QEMU vhost-vdpa 中的一个关键机制，用于在 Guest 和 vDPA 后端硬件之间插入一个”影子”层，实现地址翻译、流量拦截与回调处理。本文梳理 SVQ 的整体架构、文件描述符体系以及各方向的通知链路。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="QEMU vhost-vdpa Shadow Virtqueue 详解">
+<meta property="og:url" content="http://example.com/2026/03/09/shadow%20virtqueue/index.html">
+<meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="QEMU vhost-vdpa Shadow Virtqueue 详解Shadow Virtqueue（SVQ）是 QEMU vhost-vdpa 中的一个关键机制，用于在 Guest 和 vDPA 后端硬件之间插入一个”影子”层，实现地址翻译、流量拦截与回调处理。本文梳理 SVQ 的整体架构、文件描述符体系以及各方向的通知链路。">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-03-08T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-03-13T08:57:40.153Z">
+<meta property="article:author" content="John Doe">
+<meta property="article:tag" content="QEMU">
+<meta property="article:tag" content="vhost">
+<meta property="article:tag" content="virtio">
+<meta property="article:tag" content="虚拟化">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Hexo" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.1"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Hexo</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="http://example.com"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-shadow virtqueue" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/03/09/shadow%20virtqueue/" class="article-date">
+  <time class="dt-published" datetime="2026-03-08T16:00:00.000Z" itemprop="datePublished">2026-03-09</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%86%85%E6%A0%B8%E4%B8%8E%E8%99%9A%E6%8B%9F%E5%8C%96/">内核与虚拟化</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      QEMU vhost-vdpa Shadow Virtqueue 详解
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h1 id="QEMU-vhost-vdpa-Shadow-Virtqueue-详解"><a href="#QEMU-vhost-vdpa-Shadow-Virtqueue-详解" class="headerlink" title="QEMU vhost-vdpa Shadow Virtqueue 详解"></a>QEMU vhost-vdpa Shadow Virtqueue 详解</h1><p>Shadow Virtqueue（SVQ）是 QEMU vhost-vdpa 中的一个关键机制，用于在 Guest 和 vDPA 后端硬件之间插入一个”影子”层，实现地址翻译、流量拦截与回调处理。本文梳理 SVQ 的整体架构、文件描述符体系以及各方向的通知链路。</p>
+<span id="more"></span>
+
+<hr>
+<h2 id="一、整体架构"><a href="#一、整体架构" class="headerlink" title="一、整体架构"></a>一、整体架构</h2><p>SVQ 将原本 Guest 直通 Backend 的 virtqueue 路径拦截，在中间插入 QEMU 作为代理：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">Guest</span><br><span class="line">  |  (svq_kick: Guest 写入，QEMU 监听)</span><br><span class="line">  v</span><br><span class="line">QEMU / SVQ  &lt;----(hdev_call: Backend 完成后通知 QEMU)</span><br><span class="line">  |  (hdev_kick: QEMU 向 Backend 发起通知)</span><br><span class="line">  v</span><br><span class="line">Backend 硬件</span><br><span class="line">  |</span><br><span class="line">  `--------&gt; (svq_call: QEMU 注入中断，通知 Guest)</span><br><span class="line">             Guest</span><br></pre></td></tr></table></figure>
+
+<p>SVQ 维护四个文件描述符，分别对应两侧的 kick&#x2F;call：</p>
+<table>
+<thead>
+<tr>
+<th>FD</th>
+<th>方向</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>svq-&gt;svq_kick</code></td>
+<td>Guest → QEMU</td>
+<td>接管原有 Guest kick fd，QEMU 监听</td>
+</tr>
+<tr>
+<td><code>svq-&gt;hdev_kick</code></td>
+<td>QEMU → Backend</td>
+<td>QEMU 新建，用于通知 Backend</td>
+</tr>
+<tr>
+<td><code>svq-&gt;hdev_call</code></td>
+<td>Backend → QEMU</td>
+<td>QEMU 新建，Backend 完成时触发</td>
+</tr>
+<tr>
+<td><code>svq-&gt;svq_call</code></td>
+<td>QEMU → Guest</td>
+<td>保留原有 call fd，QEMU 发起中断</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="二、SVQ-的创建与启动"><a href="#二、SVQ-的创建与启动" class="headerlink" title="二、SVQ 的创建与启动"></a>二、SVQ 的创建与启动</h2><h3 id="2-1-创建（vhost-svq-new）"><a href="#2-1-创建（vhost-svq-new）" class="headerlink" title="2.1 创建（vhost_svq_new）"></a>2.1 创建（<code>vhost_svq_new</code>）</h3><p>创建阶段在设备初始化时完成，绑定回调 ops：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">vhost_vdpa_init                          [vhost-vdpa.c]</span><br><span class="line">└── vhost_vdpa_init_svq(dev, v)</span><br><span class="line">    └── vhost_svq_new(ops, ops_opaque)   [vhost-shadow-virtqueue.c]</span><br><span class="line">        # 分配 SVQ 实例</span><br><span class="line">        # 初始化 svq_kick 为 VHOST_FILE_UNBIND（占位）</span><br><span class="line">        # 绑定 ops / ops_opaque</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">VhostShadowVirtqueue *<span class="title function_">vhost_svq_new</span><span class="params">(<span class="type">const</span> VhostShadowVirtqueueOps *ops,</span></span><br><span class="line"><span class="params">                                    <span class="type">void</span> *ops_opaque)</span></span><br><span class="line">&#123;</span><br><span class="line">    VhostShadowVirtqueue *svq = g_new0(VhostShadowVirtqueue, <span class="number">1</span>);</span><br><span class="line"></span><br><span class="line">    event_notifier_init_fd(&amp;svq-&gt;svq_kick, VHOST_FILE_UNBIND);</span><br><span class="line">    svq-&gt;ops = ops;</span><br><span class="line">    svq-&gt;ops_opaque = ops_opaque;</span><br><span class="line">    <span class="keyword">return</span> svq;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p><code>ops</code> 决定”做什么”，<code>ops_opaque</code> 是回调函数的上下文指针。</p>
+</blockquote>
+<h3 id="2-2-启动（vhost-svq-start）"><a href="#2-2-启动（vhost-svq-start）" class="headerlink" title="2.2 启动（vhost_svq_start）"></a>2.2 启动（<code>vhost_svq_start</code>）</h3><p>设备启动阶段完成 FD 初始化与事件处理注册：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">vhost_vdpa_dev_start                             [vhost-vdpa.c]</span><br><span class="line">└── vhost_vdpa_svqs_start(dev)</span><br><span class="line">    ├── vhost_vdpa_svq_setup(dev, svq, i, &amp;err)</span><br><span class="line">    │   └── vhost_vdpa_svq_set_fds(dev, svq, idx, errp)</span><br><span class="line">    │       ├── event_notifier_init(&amp;svq-&gt;hdev_kick, 0)   # 新建 hdev_kick</span><br><span class="line">    │       ├── event_notifier_init(&amp;svq-&gt;hdev_call, 0)   # 新建 hdev_call</span><br><span class="line">    │       ├── vhost_vdpa_set_vring_dev_kick(dev, &amp;file) # 告知 Backend kick fd</span><br><span class="line">    │       └── vhost_vdpa_set_vring_dev_call(dev, &amp;file) # 告知 Backend call fd</span><br><span class="line">    └── vhost_svq_start(svq, dev-&gt;vdev, vq, iova_tree)   [vhost-shadow-virtqueue.c]</span><br><span class="line">        └── event_notifier_set_handler(&amp;svq-&gt;hdev_call, vhost_svq_handle_call)</span><br><span class="line">            # 注册 hdev_call 的事件回调</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h2 id="三、四条通知链路详解"><a href="#三、四条通知链路详解" class="headerlink" title="三、四条通知链路详解"></a>三、四条通知链路详解</h2><h3 id="3-1-svq-kick：Guest-→-QEMU"><a href="#3-1-svq-kick：Guest-→-QEMU" class="headerlink" title="3.1 svq_kick：Guest → QEMU"></a>3.1 svq_kick：Guest → QEMU</h3><p>原本 Guest 直接 kick Backend，SVQ 接管该 FD，QEMU 转为监听方。</p>
+<p><strong>设置链路：</strong></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">vhost_vdpa_set_vring_kick                           [vhost-vdpa.c]</span><br><span class="line">└── vhost_svq_set_svq_kick_fd(svq, file-&gt;fd)        [vhost-shadow-virtqueue.c]</span><br><span class="line">    ├── event_notifier_init_fd(svq_kick, svq_kick_fd)  # 绑定 Guest 的 kick fd</span><br><span class="line">    ├── event_notifier_set(svq_kick)                   # 触发一次，处理潜在的漏通知</span><br><span class="line">    └── event_notifier_set_handler(svq_kick,           # 注册监听回调</span><br><span class="line">            vhost_handle_guest_kick_notifier)</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">void</span> <span class="title function_">vhost_svq_set_svq_kick_fd</span><span class="params">(VhostShadowVirtqueue *svq, <span class="type">int</span> svq_kick_fd)</span></span><br><span class="line">&#123;</span><br><span class="line">    EventNotifier *svq_kick = &amp;svq-&gt;svq_kick;</span><br><span class="line">    <span class="type">bool</span> poll_stop = VHOST_FILE_UNBIND != event_notifier_get_fd(svq_kick);</span><br><span class="line">    <span class="type">bool</span> poll_start = svq_kick_fd != VHOST_FILE_UNBIND;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (poll_stop) &#123;</span><br><span class="line">        event_notifier_set_handler(svq_kick, <span class="literal">NULL</span>);  <span class="comment">/* 先摘除旧的监听 */</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    event_notifier_init_fd(svq_kick, svq_kick_fd);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (poll_start) &#123;</span><br><span class="line">        event_notifier_set(svq_kick);</span><br><span class="line">        event_notifier_set_handler(svq_kick, vhost_handle_guest_kick_notifier);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><strong>触发链路：</strong></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">[Guest 写入 kick fd]</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">vhost_handle_guest_kick_notifier(svq_kick)</span><br><span class="line">└── vhost_handle_guest_kick(svq)</span><br><span class="line">    └── do &#123;</span><br><span class="line">            elem = virtqueue_pop(svq-&gt;vq, ...)   # 从 vq 弹出请求</span><br><span class="line">            if (svq-&gt;ops)</span><br><span class="line">                svq-&gt;ops-&gt;avail_handler(...)     # 调用自定义回调（如地址翻译）</span><br><span class="line">            else</span><br><span class="line">                vhost_svq_add_element(svq, elem) # 默认：直接送入影子队列</span><br><span class="line">        &#125; while (!virtio_queue_empty(svq-&gt;vq))</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h3 id="3-2-hdev-kick：QEMU-→-Backend"><a href="#3-2-hdev-kick：QEMU-→-Backend" class="headerlink" title="3.2 hdev_kick：QEMU → Backend"></a>3.2 hdev_kick：QEMU → Backend</h3><p>QEMU 处理完请求后，通过新建的 <code>hdev_kick</code> fd 通知 Backend 处理。</p>
+<p><strong>设置链路</strong>（见 2.2 启动流程，<code>vhost_vdpa_svq_set_fds</code> 中完成）</p>
+<p><strong>触发链路：</strong></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">vhost_svq_add_element(svq, elem)</span><br><span class="line">└── vhost_svq_add(svq, elem, ...)</span><br><span class="line">    └── vhost_svq_kick(svq)</span><br><span class="line">        ├── smp_mb()                              # 内存屏障，保证 avail 可见</span><br><span class="line">        ├── [检查 VIRTIO_RING_F_EVENT_IDX]</span><br><span class="line">        │   ├── (有) vring_need_event(avail_event, ...) → needs_kick</span><br><span class="line">        │   └── (无) !(used-&gt;flags &amp; VRING_USED_F_NO_NOTIFY) → needs_kick</span><br><span class="line">        └── if (needs_kick)</span><br><span class="line">                event_notifier_set(&amp;svq-&gt;hdev_kick)  # 通知 Backend</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">static</span> <span class="type">void</span> <span class="title function_">vhost_svq_kick</span><span class="params">(VhostShadowVirtqueue *svq)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="type">bool</span> needs_kick;</span><br><span class="line"></span><br><span class="line">    smp_mb();</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (virtio_vdev_has_feature(svq-&gt;vdev, VIRTIO_RING_F_EVENT_IDX)) &#123;</span><br><span class="line">        <span class="type">uint16_t</span> avail_event = le16_to_cpu(</span><br><span class="line">                *(<span class="type">uint16_t</span> *)(&amp;svq-&gt;vring.used-&gt;ring[svq-&gt;vring.num]));</span><br><span class="line">        needs_kick = vring_need_event(avail_event,</span><br><span class="line">                                      svq-&gt;shadow_avail_idx,</span><br><span class="line">                                      svq-&gt;shadow_avail_idx - <span class="number">1</span>);</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        needs_kick = !(svq-&gt;vring.used-&gt;flags &amp; cpu_to_le16(VRING_USED_F_NO_NOTIFY));</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!needs_kick) &#123;</span><br><span class="line">        <span class="keyword">return</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    event_notifier_set(&amp;svq-&gt;hdev_kick);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h3 id="3-3-hdev-call：Backend-→-QEMU"><a href="#3-3-hdev-call：Backend-→-QEMU" class="headerlink" title="3.3 hdev_call：Backend → QEMU"></a>3.3 hdev_call：Backend → QEMU</h3><p>Backend 处理完请求后，写入 <code>hdev_call</code> fd，QEMU 的回调被触发。</p>
+<p><strong>设置链路</strong>（见 2.2，<code>vhost_svq_start</code> 中注册回调）</p>
+<p><strong>触发链路：</strong></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">[Backend 写入 hdev_call fd]</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">vhost_svq_handle_call(&amp;svq-&gt;hdev_call)</span><br><span class="line">└── vhost_svq_flush(svq, true)</span><br><span class="line">    └── do &#123;</span><br><span class="line">            while (true) &#123;</span><br><span class="line">                elem = vhost_svq_get_buf(svq, &amp;len)  # 从影子队列取出已完成请求</span><br><span class="line">                if (!elem) break</span><br><span class="line">                virtqueue_fill(vq, elem, len, i++)   # 填回 Guest virtqueue</span><br><span class="line">            &#125;</span><br><span class="line">            virtqueue_flush(vq, i)                   # 刷新，让 Guest 可见</span><br><span class="line">            event_notifier_set(&amp;svq-&gt;svq_call)       # 触发 svq_call，通知 Guest</span><br><span class="line">        &#125; while (!vhost_svq_enable_notification(svq))</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h3 id="3-4-svq-call：QEMU-→-Guest"><a href="#3-4-svq-call：QEMU-→-Guest" class="headerlink" title="3.4 svq_call：QEMU → Guest"></a>3.4 svq_call：QEMU → Guest</h3><p>QEMU 在完成 <code>vhost_svq_flush</code> 后，通过保留的原始 <code>svq_call</code> fd 向 Guest 注入中断。</p>
+<p><strong>设置链路：</strong></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">vhost_vdpa_set_vring_call                          [vhost-vdpa.c]</span><br><span class="line">└── vhost_svq_set_svq_call_fd(svq, file-&gt;fd)       [vhost-shadow-virtqueue.c]</span><br><span class="line">    └── event_notifier_init_fd(&amp;svq-&gt;svq_call, call_fd)</span><br><span class="line">        # 绑定原始 Guest call fd</span><br></pre></td></tr></table></figure>
+
+<p><strong>触发链路：</strong></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">vhost_svq_flush(svq, ...)</span><br><span class="line">└── event_notifier_set(&amp;svq-&gt;svq_call)   # 注入 Guest 中断</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line"> [Guest 收到 virtio 完成中断]</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">static</span> <span class="type">void</span> <span class="title function_">vhost_svq_flush</span><span class="params">(VhostShadowVirtqueue *svq,</span></span><br><span class="line"><span class="params">                            <span class="type">bool</span> check_for_avail_queue)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">do</span> &#123;</span><br><span class="line">        <span class="keyword">while</span> (<span class="literal">true</span>) &#123;</span><br><span class="line">            g_autofree VirtQueueElement *elem = vhost_svq_get_buf(svq, &amp;len);</span><br><span class="line">            <span class="keyword">if</span> (!elem) &#123;</span><br><span class="line">                <span class="keyword">break</span>;</span><br><span class="line">            &#125;</span><br><span class="line">            virtqueue_fill(vq, elem, len, i++);  <span class="comment">/* 填回 Guest virtqueue */</span></span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        virtqueue_flush(vq, i);                  <span class="comment">/* 刷新，确保 Guest 可见 */</span></span><br><span class="line">        event_notifier_set(&amp;svq-&gt;svq_call);      <span class="comment">/* 注入 Guest 中断 */</span></span><br><span class="line"></span><br><span class="line">    &#125; <span class="keyword">while</span> (!vhost_svq_enable_notification(svq));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="3-5-完整数据流总结"><a href="#3-5-完整数据流总结" class="headerlink" title="3.5 完整数据流总结"></a>3.5 完整数据流总结</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line">Guest</span><br><span class="line">  |</span><br><span class="line">  | [写 svq_kick fd]</span><br><span class="line">  v</span><br><span class="line">vhost_handle_guest_kick_notifier</span><br><span class="line">  └── virtqueue_pop → ops-&gt;avail_handler / vhost_svq_add_element</span><br><span class="line">                                |</span><br><span class="line">                                | [vhost_svq_kick]</span><br><span class="line">                                v</span><br><span class="line">                          event_notifier_set(hdev_kick)</span><br><span class="line">                                |</span><br><span class="line">                                | [Backend 处理]</span><br><span class="line">                                v</span><br><span class="line">                          [Backend 写 hdev_call fd]</span><br><span class="line">                                |</span><br><span class="line">                                v</span><br><span class="line">                    vhost_svq_handle_call</span><br><span class="line">                      └── vhost_svq_flush</span><br><span class="line">                            ├── vhost_svq_get_buf</span><br><span class="line">                            ├── virtqueue_fill / virtqueue_flush</span><br><span class="line">                            └── event_notifier_set(svq_call)</span><br><span class="line">                                        |</span><br><span class="line">                                        | [注入中断]</span><br><span class="line">                                        v</span><br><span class="line">                                      Guest</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h2 id="四、virtqueue-数据的设置"><a href="#四、virtqueue-数据的设置" class="headerlink" title="四、virtqueue 数据的设置"></a>四、virtqueue 数据的设置</h2>
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="http://example.com/2026/03/09/shadow%20virtqueue/" data-id="cuid06Drvj8al_nxrWFoVDT3d" data-title="QEMU vhost-vdpa Shadow Virtqueue 详解" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/QEMU/" rel="tag">QEMU</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/vhost/" rel="tag">vhost</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/virtio/" rel="tag">virtio</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E8%99%9A%E6%8B%9F%E5%8C%96/" rel="tag">虚拟化</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%86%85%E6%A0%B8%E4%B8%8E%E8%99%9A%E6%8B%9F%E5%8C%96/">内核与虚拟化</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/QEMU/" rel="tag">QEMU</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vhost/" rel="tag">vhost</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/virtio/" rel="tag">virtio</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%99%9A%E6%8B%9F%E5%8C%96/" rel="tag">虚拟化</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/QEMU/" style="font-size: 10px;">QEMU</a> <a href="/tags/vhost/" style="font-size: 10px;">vhost</a> <a href="/tags/virtio/" style="font-size: 10px;">virtio</a> <a href="/tags/%E8%99%9A%E6%8B%9F%E5%8C%96/" style="font-size: 10px;">虚拟化</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">March 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/03/09/shadow%20virtqueue/">QEMU vhost-vdpa Shadow Virtqueue 详解</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 John Doe<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>
