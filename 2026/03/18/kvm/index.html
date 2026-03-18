@@ -1,0 +1,250 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>KVM：通过匿名 inode 实现 VM fd 的文件操作 | Han</title><meta name="author" content="Han Zhang"><meta name="copyright" content="Han Zhang"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="背景：&#x2F;dev&#x2F;kvm 与 ioctls在 Linux 中，用户态通过打开 &#x2F;dev&#x2F;kvm 来访问 KVM 功能。内核中对应的设备驱动注册了一个 character device，其 file_operations 定义了 unlocked_ioctl，指向 kvm_dev_ioctl()： static const struct file_operations kvm_ch">
+<meta property="og:type" content="article">
+<meta property="og:title" content="KVM：通过匿名 inode 实现 VM fd 的文件操作">
+<meta property="og:url" content="https://ihanzh.github.io/2026/03/18/kvm/index.html">
+<meta property="og:site_name" content="Han">
+<meta property="og:description" content="背景：&#x2F;dev&#x2F;kvm 与 ioctls在 Linux 中，用户态通过打开 &#x2F;dev&#x2F;kvm 来访问 KVM 功能。内核中对应的设备驱动注册了一个 character device，其 file_operations 定义了 unlocked_ioctl，指向 kvm_dev_ioctl()： static const struct file_operations kvm_ch">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://ihanzh.github.io/img/avatar.jpg">
+<meta property="article:published_time" content="2026-03-17T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-03-18T12:12:23.199Z">
+<meta property="article:author" content="Han Zhang">
+<meta property="article:tag" content="KVM">
+<meta property="article:tag" content="Linux 内核">
+<meta property="article:tag" content="虚拟化">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://ihanzh.github.io/img/avatar.jpg"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "KVM：通过匿名 inode 实现 VM fd 的文件操作",
+  "url": "https://ihanzh.github.io/2026/03/18/kvm/",
+  "image": "https://ihanzh.github.io/img/avatar.jpg",
+  "datePublished": "2026-03-17T16:00:00.000Z",
+  "dateModified": "2026-03-18T12:12:23.199Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "Han Zhang",
+      "url": "https://ihanzh.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon.png"><link rel="canonical" href="https://ihanzh.github.io/2026/03/18/kvm/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.5.4"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.1.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"prismjs","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'KVM：通过匿名 inode 实现 VM fd 的文件操作',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><meta name="generator" content="Hexo 8.1.1"></head><body><div class="bg-animation" id="web_bg" style="background-image: url(/img/background.jpg);"></div><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.jpg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">4</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">8</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">3</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><span> Tags</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><span> Categories</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/top.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Han</span></a><a class="nav-page-title" href="/"><span class="site-name">KVM：通过匿名 inode 实现 VM fd 的文件操作</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><span> Tags</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><span> Categories</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">KVM：通过匿名 inode 实现 VM fd 的文件操作</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-03-17T16:00:00.000Z" title="发表于 2026-03-18 00:00:00">2026-03-18</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-03-18T12:12:23.199Z" title="更新于 2026-03-18 20:12:23">2026-03-18</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/%E8%99%9A%E6%8B%9F%E5%8C%96/">虚拟化</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><h2 id="背景：-dev-kvm-与-ioctls"><a href="#背景：-dev-kvm-与-ioctls" class="headerlink" title="背景：&#x2F;dev&#x2F;kvm 与 ioctls"></a>背景：&#x2F;dev&#x2F;kvm 与 ioctls</h2><p>在 Linux 中，用户态通过打开 <code>/dev/kvm</code> 来访问 KVM 功能。内核中对应的设备驱动注册了一个 character device，其 <code>file_operations</code> 定义了 <code>unlocked_ioctl</code>，指向 <code>kvm_dev_ioctl()</code>：</p>
+<pre class="line-numbers language-c" data-language="c"><code class="language-c"><span class="token keyword">static</span> <span class="token keyword">const</span> <span class="token keyword">struct</span> <span class="token class-name">file_operations</span> kvm_chardev_ops <span class="token operator">=</span> <span class="token punctuation">&#123;</span>
+    <span class="token punctuation">.</span>owner          <span class="token operator">=</span> THIS_MODULE<span class="token punctuation">,</span>
+    <span class="token punctuation">.</span>unlocked_ioctl <span class="token operator">=</span> kvm_dev_ioctl<span class="token punctuation">,</span>
+    <span class="token punctuation">.</span>llseek         <span class="token operator">=</span> noop_llseek<span class="token punctuation">,</span>
+    <span class="token function">KVM_COMPAT</span><span class="token punctuation">(</span>kvm_dev_ioctl<span class="token punctuation">)</span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>当用户态调用 <code>ioctl(fd, KVM_CREATE_VM, type)</code> 时，内核走到了 <code>kvm_dev_ioctl()</code>，并最终创建了一个新的 VM 对象。</p>
+<hr>
+<h2 id="1-KVM-CREATE-VM-创建一个新的-VM-fd"><a href="#1-KVM-CREATE-VM-创建一个新的-VM-fd" class="headerlink" title="1. KVM_CREATE_VM: 创建一个新的 VM fd"></a>1. KVM_CREATE_VM: 创建一个新的 VM fd</h2><p>调用流程大致如下：</p>
+<pre class="line-numbers language-none"><code class="language-none">kvm_dev_ioctl()
+|
+|__ kvm_dev_ioctl_create_vm(type)
+    fd &#x3D; get_unused_fd_flags(O_CLOEXEC)
+    kvm &#x3D; kvm_create_vm()
+    file &#x3D; anon_inode_getfile(&quot;kvm-vm&quot;, &amp;kvm_vm_fops, kvm, O_RDWR);
+    fd_install(fd, file)<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>关键几点：</p>
+<ul>
+<li><p><code>kvm_create_vm()</code> 在内核里创建并初始化一个 <code>struct kvm *</code>（即一个 VM 对象）。</p>
+</li>
+<li><p><code>get_unused_fd_flags(O_CLOEXEC)</code> 分配一个新的 fd（用户态会拿到这个 fd）。</p>
+</li>
+<li><p><code>anon_inode_getfile(&quot;kvm-vm&quot;, &amp;kvm_vm_fops, kvm, O_RDWR)</code> 创建一个 <code>struct file</code>，并将其绑定到一个“匿名 inode”。</p>
+<p>  <code>anon_inode_getfile()</code> 并不创建一个真实的磁盘文件，它创建的是一个“匿名 inode 文件”：</p>
+<ul>
+<li><strong>不是磁盘文件</strong>：不在文件系统中，没有路径名。</li>
+<li><strong>共享 inode</strong>：多个匿名文件可以共享同一个 inode（节省资源）。</li>
+<li><strong>允许内核向用户空间暴露一个 fd</strong>：用户可以对它做 <code>ioctl</code>、<code>close</code> 等常规文件操作。</li>
+</ul>
+<p>  参数说明：</p>
+<ul>
+<li><code>&quot;kvm-vm&quot;</code>：在 <code>/proc/&lt;pid&gt;/fd/&lt;n&gt;</code> 中显示为该名称（即 fd 的 class 名称）。</li>
+<li><code>&amp;kvm_vm_fops</code>：这个 fd 的行为由对应的 file operations 决定（包括 ioctl、release 等）。</li>
+<li><code>kvm</code>：作为 <code>file-&gt;private_data</code> 的私有数据，后续 ioctl&#x2F;close 会用到它。</li>
+<li><code>O_RDWR</code>：fd 的访问模式。</li>
+</ul>
+<p>  创建 VM fd 时绑定的 <code>struct file</code> 的 <code>-&gt;private_data</code> 就是 <code>struct kvm *</code>。<br>  VM fd 的 file ops 是 <code>kvm_vm_fops</code>，其 <code>unlocked_ioctl</code> 指向 <code>kvm_vm_ioctl</code>。<br>  在 <code>kvm_vm_ioctl()</code> 的开头，通常会这样取出 VM：</p>
+  <pre class="line-numbers language-c" data-language="c"><code class="language-c"><span class="token keyword">struct</span> <span class="token class-name">kvm</span> <span class="token operator">*</span>kvm <span class="token operator">=</span> filp<span class="token operator">-></span>private_data<span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>  之后的所有 <code>KVM_*</code> ioctl 都会基于这个 <code>kvm</code> 进行处理，因此同一个 fd 上的 ioctl 永远作用在同一个 VM 对象上。</p>
+</li>
+<li><p>通过 <code>fd_install(fd, file)</code>，把这个内核 <code>struct file</code> 和用户态的 fd 关联起来。</p>
+</li>
+</ul>
+<p>从此，用户拿到的 fd 与内核中的那个 VM 对象（<code>struct kvm</code>）建立了联系。</p>
+<hr>
+<h2 id="2-KVM-CREATE-VCPU-创建-vCPU-fd"><a href="#2-KVM-CREATE-VCPU-创建-vCPU-fd" class="headerlink" title="2. KVM_CREATE_VCPU: 创建 vCPU fd"></a>2. KVM_CREATE_VCPU: 创建 vCPU fd</h2><p>用户态通过 <code>ioctl(vm_fd, KVM_CREATE_VCPU, vcpu_id)</code> 请求创建 vCPU，内核在 <code>kvm_vm_ioctl()</code> 里调用 <code>kvm_vm_ioctl_create_vcpu()</code> 处理。</p>
+<p>通过 <code>create_vcpu_fd(vcpu)</code> -&gt; 生成新的 fd（内部也会用 <code>anon_inode_getfile()</code> 绑定到 <code>kvm_vcpu_fops</code>） -&gt; 返回给用户态。</p>
+<pre class="line-numbers language-c" data-language="c"><code class="language-c"><span class="token keyword">static</span> <span class="token keyword">const</span> <span class="token keyword">struct</span> <span class="token class-name">file_operations</span> kvm_vcpu_fops <span class="token operator">=</span> <span class="token punctuation">&#123;</span>
+    <span class="token punctuation">.</span>release        <span class="token operator">=</span> kvm_vcpu_release<span class="token punctuation">,</span>
+    <span class="token punctuation">.</span>unlocked_ioctl <span class="token operator">=</span> kvm_vcpu_ioctl<span class="token punctuation">,</span>
+    <span class="token punctuation">.</span>mmap           <span class="token operator">=</span> kvm_vcpu_mmap<span class="token punctuation">,</span>
+    <span class="token punctuation">.</span>llseek         <span class="token operator">=</span> noop_llseek<span class="token punctuation">,</span>
+    <span class="token function">KVM_COMPAT</span><span class="token punctuation">(</span>kvm_vcpu_compat_ioctl<span class="token punctuation">)</span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<hr>
+<h2 id="3-KVM-RUN-进入-guest-退出（arm64）"><a href="#3-KVM-RUN-进入-guest-退出（arm64）" class="headerlink" title="3. KVM_RUN: 进入 guest &#x2F; 退出（arm64）"></a>3. KVM_RUN: 进入 guest &#x2F; 退出（arm64）</h2><p>当用户态调用 <code>ioctl(cpu, KVM_RUN, 0)</code> 时，<code>kvm_vcpu_ioctl()</code> 会将请求交给 <code>kvm_arch_vcpu_ioctl_run()</code> 处理（对于 ARM64）。这是 vCPU fd 上最重要的一条 control path。</p>
+<h3 id="3-1-ARM64-的-KVM-RUN-执行流程"><a href="#3-1-ARM64-的-KVM-RUN-执行流程" class="headerlink" title="3.1 ARM64 的 KVM_RUN 执行流程"></a>3.1 ARM64 的 <code>KVM_RUN</code> 执行流程</h3><p><code>kvm_arch_vcpu_ioctl_run()</code> 的核心职责是：</p>
+<ul>
+<li>准备运行环境（state sync、requests 等）</li>
+<li>进入 guest（EL2&#x2F;hypervisor）执行</li>
+<li>在每次 vmexit 后同步状态并填充 <code>kvm_run</code></li>
+<li>直到需要返回 userspace</li>
+</ul>
+<p>主循环里最关键的调用是：</p>
+<pre class="line-numbers language-c" data-language="c"><code class="language-c">ret <span class="token operator">=</span> <span class="token function">kvm_arm_vcpu_enter_exit</span><span class="token punctuation">(</span>vcpu<span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+
+<p>该调用会进入 hypervisor 路径（EL2），最终通过 <code>kvm_call_hyp_ret(__kvm_vcpu_run, vcpu)</code> 调用 <code>__kvm_vcpu_run()</code>。</p>
+<p><code>__kvm_vcpu_run()</code> 的总体职责：</p>
+<ul>
+<li>保存 host CPU 状态（寄存器&#x2F;系统寄存器&#x2F;DEBUG&#x2F;FP 等）。</li>
+<li>加载 guest 状态（guest 寄存器、Stage-2 MMU、虚拟中断、timer、性能计数器等）。</li>
+<li>调用 <code>__guest_enter()</code>，正式“跳进” guest 执行。</li>
+<li>guest 退出后恢复 host 状态并返回 exit_code 给上层（KVM 代码再处理并写入 <code>kvm_run-&gt;exit_reason</code>）。</li>
+</ul>
+<p>退出 guest 后，<code>kvm_arch_vcpu_ioctl_run()</code> 会：</p>
+<ul>
+<li>同步硬件状态（PMU&#x2F;VGIC&#x2F;timer），让 kernel 和 userspace 看到一致结果。</li>
+<li>处理 exit（<code>handle_exit()</code> 等），把 exit 信息写入 <code>kvm_run</code>。</li>
+</ul>
+<p>主循环会持续运行，直到 exit 需要在 host 处理（如 I&#x2F;O 请求、需要重新进入 guest、signal&#x2F;错误等），这时循环退出，<code>ret</code> 返回给调用 ioctls 的 userspace 线程。</p>
+<hr>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://ihanzh.github.io">Han Zhang</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://ihanzh.github.io/2026/03/18/kvm/">https://ihanzh.github.io/2026/03/18/kvm/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://ihanzh.github.io" target="_blank">Han</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E8%99%9A%E6%8B%9F%E5%8C%96/">虚拟化</a><a class="post-meta__tags" href="/tags/KVM/">KVM</a><a class="post-meta__tags" href="/tags/Linux-%E5%86%85%E6%A0%B8/">Linux 内核</a></div><div class="post-share"><div class="social-share" data-image="/img/avatar.jpg" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2026/03/18/qemu-vcpu-start/" title="QEMU vCPU 线程启动全流程"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">QEMU vCPU 线程启动全流程</div></div><div class="info-2"><div class="info-item-1"> 这篇文章从 QEMU 启动开始，沿着机器（Machine）&#x2F;设备（Device）模型，一路追踪到 vCPU 线程的创建与 KVM 运行过程。    1. 从 main() 到 Machine 创建：QEMU 的大致启动流程QEMU 采用 QOM（QEMU Object Model）构建设备树，启动时首先会创建一个 MachineState，然后在 Machine 初始化阶段创建各种设备（如 CPU、PCI 总线、内存控制器等）。 关键流程：  先通过 kvm_fd 创建 VM，获得 vmfd:  main() -&gt; qemu_init() -&gt; configure_accelerators() -&gt; accel_init_machine() -&gt; acc-&gt;init_machine() -&gt; kvm_init() -&gt; do_kvm_create_vm() -&gt; kvm_ioctl(s, KVM_CREATE_VM, type)  创建 Machine: main() -&gt; qemu_init() -&gt; qm...</div></div></div></a><a class="pagination-related" href="/2026/03/16/dma/" title="DMA 原理和工作流程"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">DMA 原理和工作流程</div></div><div class="info-2"><div class="info-item-1">在计算机系统中，数据搬运是一项极其频繁且繁重的任务。如果每一次硬盘读取、网卡收发都要 CPU 亲自去一字节一字节地搬运，哪怕 CPU 算力再强，也会被这些“体力活”彻底拖垮。 为了解放 CPU，DMA（Direct Memory Access，直接内存访问） 技术应运而生。   一、 核心概念：什么是 DMA 与 DMA Buffer？1. DMA（直接内存访问）本质上，DMA 是一种硬件级的数据旁路机制。它的核心是一个名叫 DMAC（DMA控制器） 的硬件（现在通常集成在主板芯片组或外设内部，如 PCIe 设备的 Bus Master）。 简单来说，它的工作就是：“把数据搬运这种繁重的体力活从 CPU 手里接管过来，让 CPU 去干更有价值的计算工作。”在使用 DMA 的场景下，CPU 只需要在开头交代一下任务（源地址、目的地址、传输大小），在结尾接收一下中断（验收成果），中间的数据流转完全由 DMA 硬件独立完成。 2. DMA Buffer（DMA 缓冲区）从内存（Memory）的视角来看，DMA Buffer 是操作系统在系统主存（RAM）中特意开辟出来的一块特殊区域。可...</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/03/18/qemu-vcpu-start/" title="QEMU vCPU 线程启动全流程"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-03-18</div><div class="info-item-2">QEMU vCPU 线程启动全流程</div></div><div class="info-2"><div class="info-item-1"> 这篇文章从 QEMU 启动开始，沿着机器（Machine）&#x2F;设备（Device）模型，一路追踪到 vCPU 线程的创建与 KVM 运行过程。    1. 从 main() 到 Machine 创建：QEMU 的大致启动流程QEMU 采用 QOM（QEMU Object Model）构建设备树，启动时首先会创建一个 MachineState，然后在 Machine 初始化阶段创建各种设备（如 CPU、PCI 总线、内存控制器等）。 关键流程：  先通过 kvm_fd 创建 VM，获得 vmfd:  main() -&gt; qemu_init() -&gt; configure_accelerators() -&gt; accel_init_machine() -&gt; acc-&gt;init_machine() -&gt; kvm_init() -&gt; do_kvm_create_vm() -&gt; kvm_ioctl(s, KVM_CREATE_VM, type)  创建 Machine: main() -&gt; qemu_init() -&gt; qm...</div></div></div></a><a class="pagination-related" href="/2026/03/09/shadow-virtqueue/" title="QEMU vhost-vdpa Shadow Virtqueue 详解"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-03-09</div><div class="info-item-2">QEMU vhost-vdpa Shadow Virtqueue 详解</div></div><div class="info-2"><div class="info-item-1">  Shadow Virtqueue（SVQ）是 QEMU vhost-vdpa 中的一个关键机制，用于在 Guest 和 vDPA 后端硬件之间插入一个”影子”层，实现地址翻译、流量拦截与回调处理。本文梳理 SVQ 的整体架构、文件描述符体系以及各方向的通知链路。    一、整体架构SVQ 将原本 Guest 直通 Backend 的 virtqueue 路径拦截，在中间插入 QEMU 作为代理： Guest   |  (svq_kick: Guest 写入，QEMU 监听)   v QEMU &#x2F; SVQ  &lt;----(hdev_call: Backend 完成后通知 QEMU)   |  (hdev_kick: QEMU 向 Backend 发起通知)   v Backend 硬件   |   &#96;--------&gt; (svq_call: QEMU 注入中断，通知 Guest)              Guest  SVQ 维护四个文件描述符，分别对应两侧的 kick&#x2F;call：    FD 方向 说明    svq-&gt;svq_k...</div></div></div></a></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.jpg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Han Zhang</div><div class="author-info-description">内核与虚拟化技术</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">4</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">8</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">3</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/ihanzh"><i class="fab fa-github"></i><span>Follow Me</span></a></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E8%83%8C%E6%99%AF%EF%BC%9A-dev-kvm-%E4%B8%8E-ioctls"><span class="toc-number">1.</span> <span class="toc-text">背景：&#x2F;dev&#x2F;kvm 与 ioctls</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#1-KVM-CREATE-VM-%E5%88%9B%E5%BB%BA%E4%B8%80%E4%B8%AA%E6%96%B0%E7%9A%84-VM-fd"><span class="toc-number">2.</span> <span class="toc-text">1. KVM_CREATE_VM: 创建一个新的 VM fd</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-KVM-CREATE-VCPU-%E5%88%9B%E5%BB%BA-vCPU-fd"><span class="toc-number">3.</span> <span class="toc-text">2. KVM_CREATE_VCPU: 创建 vCPU fd</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-KVM-RUN-%E8%BF%9B%E5%85%A5-guest-%E9%80%80%E5%87%BA%EF%BC%88arm64%EF%BC%89"><span class="toc-number">4.</span> <span class="toc-text">3. KVM_RUN: 进入 guest &#x2F; 退出（arm64）</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#3-1-ARM64-%E7%9A%84-KVM-RUN-%E6%89%A7%E8%A1%8C%E6%B5%81%E7%A8%8B"><span class="toc-number">4.1.</span> <span class="toc-text">3.1 ARM64 的 KVM_RUN 执行流程</span></a></li></ol></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/03/18/qemu-vcpu-start/" title="QEMU vCPU 线程启动全流程">QEMU vCPU 线程启动全流程</a><time datetime="2026-03-18T04:00:00.000Z" title="发表于 2026-03-18 12:00:00">2026-03-18</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/03/18/kvm/" title="KVM：通过匿名 inode 实现 VM fd 的文件操作">KVM：通过匿名 inode 实现 VM fd 的文件操作</a><time datetime="2026-03-17T16:00:00.000Z" title="发表于 2026-03-18 00:00:00">2026-03-18</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/03/16/dma/" title="DMA 原理和工作流程">DMA 原理和工作流程</a><time datetime="2026-03-16T08:00:00.000Z" title="发表于 2026-03-16 16:00:00">2026-03-16</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/03/09/shadow-virtqueue/" title="QEMU vhost-vdpa Shadow Virtqueue 详解">QEMU vhost-vdpa Shadow Virtqueue 详解</a><time datetime="2026-03-08T16:00:00.000Z" title="发表于 2026-03-09 00:00:00">2026-03-09</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By Han Zhang</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.1</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.4</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.4"></script><script src="/js/main.js?v=5.5.4"></script><div class="js-pjax"></div><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>
