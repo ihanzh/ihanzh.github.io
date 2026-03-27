@@ -1,0 +1,832 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>Kata runtime 关键组件分析 | Han</title><meta name="author" content="Han Zhang"><meta name="copyright" content="Han Zhang"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="1. ServiceManagerServiceManager 是 Kata 服务的核心组件，负责管理 Kata 容器的生命周期和状态。它包含一个消息接收器 receiver，一个 RuntimeHandlerManager 对象 handler，一个可选的 Server 对象 server。 crates&#x2F;service&#x2F;src&#x2F;manager.rspub struct ServiceManag">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Kata runtime 关键组件分析">
+<meta property="og:url" content="https://ihanzh.github.io/2026/03/21/kata-class/index.html">
+<meta property="og:site_name" content="Han">
+<meta property="og:description" content="1. ServiceManagerServiceManager 是 Kata 服务的核心组件，负责管理 Kata 容器的生命周期和状态。它包含一个消息接收器 receiver，一个 RuntimeHandlerManager 对象 handler，一个可选的 Server 对象 server。 crates&#x2F;service&#x2F;src&#x2F;manager.rspub struct ServiceManag">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://ihanzh.github.io/img/avatar.jpg">
+<meta property="article:published_time" content="2026-03-20T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-03-27T01:23:27.345Z">
+<meta property="article:author" content="Han Zhang">
+<meta property="article:tag" content="Rust">
+<meta property="article:tag" content="container">
+<meta property="article:tag" content="kata">
+<meta property="article:tag" content="sandbox">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://ihanzh.github.io/img/avatar.jpg"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Kata runtime 关键组件分析",
+  "url": "https://ihanzh.github.io/2026/03/21/kata-class/",
+  "image": "https://ihanzh.github.io/img/avatar.jpg",
+  "datePublished": "2026-03-20T16:00:00.000Z",
+  "dateModified": "2026-03-27T01:23:27.345Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "Han Zhang",
+      "url": "https://ihanzh.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon.png"><link rel="canonical" href="https://ihanzh.github.io/2026/03/21/kata-class/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.5.4"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.1.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"prismjs","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'Kata runtime 关键组件分析',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><meta name="generator" content="Hexo 8.1.1"></head><body><div class="bg-animation" id="web_bg" style="background-image: url(/img/background.jpg);"></div><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.jpg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">7</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">13</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">3</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><span> Tags</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><span> Categories</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/top.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Han</span></a><a class="nav-page-title" href="/"><span class="site-name">Kata runtime 关键组件分析</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><span> Tags</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><span> Categories</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">Kata runtime 关键组件分析</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-03-20T16:00:00.000Z" title="发表于 2026-03-21 00:00:00">2026-03-21</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-03-27T01:23:27.345Z" title="更新于 2026-03-27 09:23:27">2026-03-27</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/kata/">kata</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><h2 id="1-ServiceManager"><a href="#1-ServiceManager" class="headerlink" title="1. ServiceManager"></a>1. ServiceManager</h2><p>ServiceManager 是 Kata 服务的核心组件，负责管理 Kata 容器的生命周期和状态。它包含一个消息接收器 receiver，一个 RuntimeHandlerManager 对象 handler，一个可选的 Server 对象 server。</p>
+<pre class="line-numbers language-rust" data-language="rust"><div class="caption"><span>crates/service/src/manager.rs</span></div><code class="language-rust"><span class="token keyword">pub</span> <span class="token keyword">struct</span> <span class="token type-definition class-name">ServiceManager</span> <span class="token punctuation">&#123;</span>
+    receiver<span class="token punctuation">:</span> <span class="token class-name">Option</span><span class="token operator">&lt;</span><span class="token class-name">Receiver</span><span class="token operator">&lt;</span><span class="token class-name">Message</span><span class="token operator">>></span><span class="token punctuation">,</span>
+    handler<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token class-name">RuntimeHandlerManager</span><span class="token operator">></span><span class="token punctuation">,</span>
+    server<span class="token punctuation">:</span> <span class="token class-name">Option</span><span class="token operator">&lt;</span><span class="token class-name">Server</span><span class="token operator">></span><span class="token punctuation">,</span>
+    binary<span class="token punctuation">:</span> <span class="token class-name">String</span><span class="token punctuation">,</span>
+    address<span class="token punctuation">:</span> <span class="token class-name">String</span><span class="token punctuation">,</span>
+    namespace<span class="token punctuation">:</span> <span class="token class-name">String</span><span class="token punctuation">,</span>
+    event_publisher<span class="token punctuation">:</span> <span class="token class-name">Box</span><span class="token operator">&lt;</span><span class="token keyword">dyn</span> <span class="token class-name">Forwarder</span><span class="token operator">></span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="2-SandboxService-和-TaskService"><a href="#2-SandboxService-和-TaskService" class="headerlink" title="2. SandboxService 和 TaskService"></a>2. SandboxService 和 TaskService</h2><p>SandboxService 和 TaskService 都是 ServiceManager 挂载到 ttrpc server 上的服务入口。</p>
+<ul>
+<li>SandboxService 面向沙箱维度的接口（如 create&#x2F;start&#x2F;stop&#x2F;status&#x2F;shutdown sandbox）。它负责把 ttrpc 的 sandbox 请求转换为内部 SandboxRequest，交给 RuntimeHandlerManager 处理，再把结果转换回 ttrpc 响应。</li>
+<li>TaskService 面向容器&#x2F;进程维度的接口（如 create&#x2F;start&#x2F;exec&#x2F;kill&#x2F;stats&#x2F;wait task）。它负责把 ttrpc 的 task 请求转换为内部 TaskRequest，交给同一个 RuntimeHandlerManager 处理，再把结果转换回 ttrpc 响应。</li>
+</ul>
+<p>因此，这两个结构体虽然字段都只有一个 handler，但它们的意义是“协议适配 + 接口分层”：</p>
+<ul>
+<li>对外分成两套 API（sandbox API 与 task API），语义清晰。</li>
+<li>对内复用同一个 RuntimeHandlerManager，避免在 service 层重复实现业务逻辑。</li>
+<li>通过 Arc 共享 handler，使两个服务在并发请求下可安全复用同一套运行时状态。</li>
+</ul>
+<pre class="line-numbers language-rust" data-language="rust"><div class="caption"><span>crates/service/src/sandbox_service.rs</span></div><code class="language-rust"><span class="token keyword">pub</span><span class="token punctuation">(</span><span class="token keyword">crate</span><span class="token punctuation">)</span> <span class="token keyword">struct</span> <span class="token type-definition class-name">SandboxService</span> <span class="token punctuation">&#123;</span>
+    handler<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token class-name">RuntimeHandlerManager</span><span class="token operator">></span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<pre class="line-numbers language-rust" data-language="rust"><div class="caption"><span>crates/service/src/task_service.rs</span></div><code class="language-rust"><span class="token keyword">pub</span><span class="token punctuation">(</span><span class="token keyword">crate</span><span class="token punctuation">)</span> <span class="token keyword">struct</span> <span class="token type-definition class-name">TaskService</span> <span class="token punctuation">&#123;</span>
+    handler<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token class-name">RuntimeHandlerManager</span><span class="token operator">></span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="3-RuntimeHandlerManager"><a href="#3-RuntimeHandlerManager" class="headerlink" title="3. RuntimeHandlerManager"></a>3. RuntimeHandlerManager</h2><p>RuntimeHandlerManager 是一个结构体，包含一个内部的 RuntimeHandlerManagerInner 对象。</p>
+<pre class="line-numbers language-rust" data-language="rust"><div class="caption"><span>crates/runtimes/src/manager.rs</span></div><code class="language-rust"><span class="token keyword">pub</span> <span class="token keyword">struct</span> <span class="token type-definition class-name">RuntimeHandlerManager</span> <span class="token punctuation">&#123;</span>
+    inner<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token class-name">RwLock</span><span class="token operator">&lt;</span><span class="token class-name">RuntimeHandlerManagerInner</span><span class="token operator">>></span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<p>RuntimeHandlerManagerInner 是一个结构体，包含一个字符串 id，一个消息发送器 msg_sender，一个 KataTracer 对象和一个可选的 RuntimeInstance 对象。KataTracer 是一个用于跟踪 Kata 容器运行状态的对象，RuntimeInstance 是一个包含沙箱和容器管理器的对象。</p>
+<pre class="line-numbers language-rust" data-language="rust"><div class="caption"><span>crates/runtimes/src/manager.rs</span></div><code class="language-rust"><span class="token keyword">struct</span> <span class="token type-definition class-name">RuntimeHandlerManagerInner</span> <span class="token punctuation">&#123;</span>
+    id<span class="token punctuation">:</span> <span class="token class-name">String</span><span class="token punctuation">,</span>
+    msg_sender<span class="token punctuation">:</span> <span class="token class-name">Sender</span><span class="token operator">&lt;</span><span class="token class-name">Message</span><span class="token operator">></span><span class="token punctuation">,</span>
+    kata_tracer<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token class-name">Mutex</span><span class="token operator">&lt;</span><span class="token class-name">KataTracer</span><span class="token operator">>></span><span class="token punctuation">,</span>
+    runtime_instance<span class="token punctuation">:</span> <span class="token class-name">Option</span><span class="token operator">&lt;</span><span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token class-name">RuntimeInstance</span><span class="token operator">>></span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>RuntimeInstance 有两个成员：sandbox 和 container_manager。sandbox 是一个实现了 Sandbox trait 的对象，container_manager 是一个实现了 ContainerManager trait 的对象。</p>
+<pre class="line-numbers language-rust" data-language="rust"><div class="caption"><span>crates/runtimes/common/src/runtime_handler.rs</span></div><code class="language-rust"><span class="token keyword">pub</span> <span class="token keyword">struct</span> <span class="token type-definition class-name">RuntimeInstance</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">pub</span> sandbox<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token keyword">dyn</span> <span class="token class-name">Sandbox</span><span class="token operator">></span><span class="token punctuation">,</span>
+    <span class="token keyword">pub</span> container_manager<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token keyword">dyn</span> <span class="token class-name">ContainerManager</span><span class="token operator">></span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+
+<h2 id="4-Sandbox-trait"><a href="#4-Sandbox-trait" class="headerlink" title="4. Sandbox trait"></a>4. Sandbox trait</h2><p>Sandbox trait 定义了一个沙箱的接口，包括启动、停止、清理、关闭、获取状态和等待等方法。这些方法都是异步的，返回一个 Result 类型，表示操作是否成功。</p>
+<pre class="line-numbers language-rust" data-language="rust"><div class="caption"><span>crates/runtimes/common/src/sandbox.rs</span></div><code class="language-rust"><span class="token keyword">pub</span> <span class="token keyword">trait</span> <span class="token type-definition class-name">Sandbox</span><span class="token punctuation">:</span> <span class="token class-name">Send</span> <span class="token operator">+</span> <span class="token class-name">Sync</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">start</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">start_template</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">stop</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">cleanup</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">shutdown</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">status</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token class-name">SandboxStatus</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">wait</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token class-name">SandboxExitInfo</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token punctuation">...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>VirtSandbox 是一个实现了 Sandbox trait 的结构体</p>
+<pre class="line-numbers language-rust" data-language="rust"><div class="caption"><span>crates/runtimes/virt_container/src/sandbox.rs</span></div><code class="language-rust"><span class="token keyword">pub</span> <span class="token keyword">struct</span> <span class="token type-definition class-name">VirtSandbox</span> <span class="token punctuation">&#123;</span>
+    sid<span class="token punctuation">:</span> <span class="token class-name">String</span><span class="token punctuation">,</span>
+    msg_sender<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token class-name">Mutex</span><span class="token operator">&lt;</span><span class="token class-name">Sender</span><span class="token operator">&lt;</span><span class="token class-name">Message</span><span class="token operator">>></span><span class="token operator">></span><span class="token punctuation">,</span>
+    inner<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token class-name">RwLock</span><span class="token operator">&lt;</span><span class="token class-name">SandboxInner</span><span class="token operator">>></span><span class="token punctuation">,</span>
+    resource_manager<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token class-name">ResourceManager</span><span class="token operator">></span><span class="token punctuation">,</span>
+    agent<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token keyword">dyn</span> <span class="token class-name">Agent</span><span class="token operator">></span><span class="token punctuation">,</span>
+    hypervisor<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token keyword">dyn</span> <span class="token class-name">Hypervisor</span><span class="token operator">></span><span class="token punctuation">,</span>
+    monitor<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token class-name">HealthCheck</span><span class="token operator">></span><span class="token punctuation">,</span>
+    sandbox_config<span class="token punctuation">:</span> <span class="token class-name">Option</span><span class="token operator">&lt;</span><span class="token class-name">SandboxConfig</span><span class="token operator">></span><span class="token punctuation">,</span>
+    shm_size<span class="token punctuation">:</span> <span class="token keyword">u64</span><span class="token punctuation">,</span>
+    factory<span class="token punctuation">:</span> <span class="token class-name">Option</span><span class="token operator">&lt;</span><span class="token class-name">Factory</span><span class="token operator">></span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>VirtSandbox 实现了 Sandbox trait 的 start 方法，该方法负责启动沙箱。</p>
+<ol>
+<li>从 oci spec 中获取 selinux label，并调用 hypervisor 的 prepare_vm 方法准备虚拟机。</li>
+</ol>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token keyword">let</span> selinux_label <span class="token operator">=</span> <span class="token function">load_oci_spec</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">ok</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">and_then</span><span class="token punctuation">(</span><span class="token closure-params"><span class="token closure-punctuation punctuation">|</span>spec<span class="token closure-punctuation punctuation">|</span></span> <span class="token punctuation">&#123;</span>
+    spec<span class="token punctuation">.</span><span class="token function">process</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token punctuation">.</span><span class="token function">as_ref</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token punctuation">.</span><span class="token function">and_then</span><span class="token punctuation">(</span><span class="token closure-params"><span class="token closure-punctuation punctuation">|</span>process<span class="token closure-punctuation punctuation">|</span></span> process<span class="token punctuation">.</span><span class="token function">selinux_label</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">self</span><span class="token punctuation">.</span>hypervisor
+    <span class="token punctuation">.</span><span class="token function">prepare_vm</span><span class="token punctuation">(</span>
+        id<span class="token punctuation">,</span>
+        sandbox_config<span class="token punctuation">.</span>network_env<span class="token punctuation">.</span>netns<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token operator">&amp;</span>sandbox_config<span class="token punctuation">.</span>annotations<span class="token punctuation">,</span>
+        selinux_label<span class="token punctuation">,</span>
+    <span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span>
+    <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"prepare vm"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<ol start="2">
+<li>prepare_for_start_sandbox 构建需要挂载&#x2F;注入到 VM 的资源列表，resource_manager 的 prepare_before_start_vm 真正执行资源准备</li>
+</ol>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token comment">// generate device and setup before start vm</span>
+<span class="token comment">// should after hypervisor.prepare_vm</span>
+<span class="token keyword">let</span> resources <span class="token operator">=</span> <span class="token keyword">self</span>
+    <span class="token punctuation">.</span><span class="token function">prepare_for_start_sandbox</span><span class="token punctuation">(</span>id<span class="token punctuation">,</span> sandbox_config<span class="token punctuation">.</span>network_env<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span><span class="token operator">?</span><span class="token punctuation">;</span>
+
+<span class="token keyword">self</span><span class="token punctuation">.</span>resource_manager
+    <span class="token punctuation">.</span><span class="token function">prepare_before_start_vm</span><span class="token punctuation">(</span>resources<span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span>
+    <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"set up device before start vm"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<ol start="3">
+<li>调用 hypervisor 的 start_vm 方法启动虚拟机。</li>
+</ol>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token comment">// start vm</span>
+<span class="token keyword">self</span><span class="token punctuation">.</span>hypervisor<span class="token punctuation">.</span><span class="token function">start_vm</span><span class="token punctuation">(</span><span class="token number">10_000</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span><span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"start vm"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+<span class="token macro property">info!</span><span class="token punctuation">(</span><span class="token macro property">sl!</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"start vm"</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+
+<ol start="4">
+<li>用户&#x2F;上层容器配置里的 prestart&#x2F;create_runtime hook，通过调用 execute_oci_hook_functions(…) 执行这些 hook（在 VM 启动后、容器创建前），后续如果 prestart hook 里修改了网络配置，需要重新扫描网络命名空间并设置网络设备。</li>
+</ol>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token comment">// execute pre-start hook functions, including Prestart Hooks and CreateRuntime Hooks</span>
+<span class="token keyword">let</span> <span class="token punctuation">(</span>prestart_hooks<span class="token punctuation">,</span> create_runtime_hooks<span class="token punctuation">)</span> <span class="token operator">=</span>
+    <span class="token keyword">if</span> <span class="token keyword">let</span> <span class="token class-name">Some</span><span class="token punctuation">(</span>hooks<span class="token punctuation">)</span> <span class="token operator">=</span> sandbox_config<span class="token punctuation">.</span>hooks<span class="token punctuation">.</span><span class="token function">as_ref</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token punctuation">(</span>
+            hooks<span class="token punctuation">.</span><span class="token function">prestart</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">unwrap_or_default</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            hooks<span class="token punctuation">.</span><span class="token function">create_runtime</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">unwrap_or_default</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+        <span class="token punctuation">(</span><span class="token class-name">Vec</span><span class="token punctuation">::</span><span class="token function">new</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token class-name">Vec</span><span class="token punctuation">::</span><span class="token function">new</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+    <span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+
+<span class="token keyword">self</span><span class="token punctuation">.</span><span class="token function">execute_oci_hook_functions</span><span class="token punctuation">(</span>
+    <span class="token operator">&amp;</span>prestart_hooks<span class="token punctuation">,</span>
+    <span class="token operator">&amp;</span>create_runtime_hooks<span class="token punctuation">,</span>
+    <span class="token operator">&amp;</span>sandbox_config<span class="token punctuation">.</span>state<span class="token punctuation">,</span>
+<span class="token punctuation">)</span>
+<span class="token punctuation">.</span><span class="token keyword">await</span><span class="token operator">?</span><span class="token punctuation">;</span>
+<span class="token comment">// 1. if there are pre-start hook functions, network config might have been changed.</span>
+<span class="token comment">//    We need to rescan the netns to handle the change.</span>
+<span class="token comment">// 2. Do not scan the netns if we want no network for the VM.</span>
+<span class="token comment">// TODO In case of vm factory, scan the netns to hotplug interfaces after the VM is started.</span>
+<span class="token keyword">let</span> config <span class="token operator">=</span> <span class="token keyword">self</span><span class="token punctuation">.</span>resource_manager<span class="token punctuation">.</span><span class="token function">config</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span><span class="token punctuation">;</span>
+<span class="token keyword">if</span> <span class="token keyword">self</span><span class="token punctuation">.</span><span class="token function">has_prestart_hooks</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>prestart_hooks<span class="token punctuation">,</span> <span class="token operator">&amp;</span>create_runtime_hooks<span class="token punctuation">)</span>
+    <span class="token operator">&amp;&amp;</span> <span class="token operator">!</span>config<span class="token punctuation">.</span>runtime<span class="token punctuation">.</span>disable_new_netns
+    <span class="token operator">&amp;&amp;</span> <span class="token operator">!</span><span class="token function">dan_config_path</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>config<span class="token punctuation">,</span> <span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">.</span>sid<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">exists</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> <span class="token keyword">let</span> <span class="token class-name">Some</span><span class="token punctuation">(</span>netns_path<span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token operator">&amp;</span>sandbox_config<span class="token punctuation">.</span>network_env<span class="token punctuation">.</span>netns <span class="token punctuation">&#123;</span>
+        <span class="token keyword">let</span> network_resource <span class="token operator">=</span> <span class="token class-name">NetworkConfig</span><span class="token punctuation">::</span><span class="token class-name">NetNs</span><span class="token punctuation">(</span><span class="token class-name">NetworkWithNetNsConfig</span> <span class="token punctuation">&#123;</span>
+            network_model<span class="token punctuation">:</span> config<span class="token punctuation">.</span>runtime<span class="token punctuation">.</span>internetworking_model<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            netns_path<span class="token punctuation">:</span> netns_path<span class="token punctuation">.</span><span class="token function">to_owned</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            queues<span class="token punctuation">:</span> <span class="token keyword">self</span>
+                <span class="token punctuation">.</span>hypervisor
+                <span class="token punctuation">.</span><span class="token function">hypervisor_config</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+                <span class="token punctuation">.</span><span class="token keyword">await</span>
+                <span class="token punctuation">.</span>network_info
+                <span class="token punctuation">.</span>network_queues <span class="token keyword">as</span> <span class="token keyword">usize</span><span class="token punctuation">,</span>
+            network_created<span class="token punctuation">:</span> sandbox_config<span class="token punctuation">.</span>network_env<span class="token punctuation">.</span>network_created<span class="token punctuation">,</span>
+        <span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token keyword">self</span><span class="token punctuation">.</span>resource_manager
+            <span class="token punctuation">.</span><span class="token function">handle_network</span><span class="token punctuation">(</span>network_resource<span class="token punctuation">)</span>
+            <span class="token punctuation">.</span><span class="token keyword">await</span>
+            <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"set up device after start vm"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<ol start="5">
+<li>从 hypervisor 获取 guest agent 的 socket 地址，将 host agent 连接到 guest agent，并设置 guest agent 的访问策略。最后调用 resource_manager 的 setup_after_start_vm 方法完成设备的后续设置。</li>
+</ol>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token comment">// connect agent</span>
+<span class="token comment">// set agent socket</span>
+<span class="token keyword">let</span> address <span class="token operator">=</span> <span class="token keyword">self</span>
+    <span class="token punctuation">.</span>hypervisor
+    <span class="token punctuation">.</span><span class="token function">get_agent_socket</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span>
+    <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"get agent socket"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+<span class="token keyword">self</span><span class="token punctuation">.</span>agent
+    <span class="token punctuation">.</span><span class="token function">start</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>address<span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span>
+    <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token macro property">format!</span><span class="token punctuation">(</span><span class="token string">"connect to address &#123;:?&#125;"</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>address<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+<span class="token keyword">self</span><span class="token punctuation">.</span><span class="token function">set_agent_policy</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span><span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"set agent policy"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+
+<span class="token keyword">self</span><span class="token punctuation">.</span>resource_manager
+    <span class="token punctuation">.</span><span class="token function">setup_after_start_vm</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span>
+    <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"setup device after start vm"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<ol start="6">
+<li>读取用户&#x2F;上层容器配置里的 kernel module 配置，并调用 agent 的 create_sandbox 方法在 VM 内创建沙箱。将沙箱状态设置为 Running，并调用 store_guest_details 方法获取并存储 guest 的详细信息。</li>
+</ol>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token comment">// create sandbox in vm</span>
+<span class="token keyword">let</span> agent_config <span class="token operator">=</span> <span class="token keyword">self</span><span class="token punctuation">.</span>agent<span class="token punctuation">.</span><span class="token function">agent_config</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> kernel_modules <span class="token operator">=</span> <span class="token class-name">KernelModule</span><span class="token punctuation">::</span><span class="token function">set_kernel_modules</span><span class="token punctuation">(</span>agent_config<span class="token punctuation">.</span>kernel_modules<span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> req <span class="token operator">=</span> <span class="token namespace">agent<span class="token punctuation">::</span></span><span class="token class-name">CreateSandboxRequest</span> <span class="token punctuation">&#123;</span>
+    hostname<span class="token punctuation">:</span> sandbox_config<span class="token punctuation">.</span>hostname<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+    dns<span class="token punctuation">:</span> sandbox_config<span class="token punctuation">.</span>dns<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+    storages<span class="token punctuation">:</span> <span class="token keyword">self</span>
+        <span class="token punctuation">.</span>resource_manager
+        <span class="token punctuation">.</span><span class="token function">get_storage_for_sandbox</span><span class="token punctuation">(</span><span class="token keyword">self</span><span class="token punctuation">.</span>shm_size<span class="token punctuation">)</span>
+        <span class="token punctuation">.</span><span class="token keyword">await</span>
+        <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"get storages for sandbox"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">,</span>
+    sandbox_pidns<span class="token punctuation">:</span> <span class="token boolean">false</span><span class="token punctuation">,</span>
+    sandbox_id<span class="token punctuation">:</span> id<span class="token punctuation">.</span><span class="token function">to_string</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+    guest_hook_path<span class="token punctuation">:</span> <span class="token keyword">self</span>
+        <span class="token punctuation">.</span>hypervisor
+        <span class="token punctuation">.</span><span class="token function">hypervisor_config</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token punctuation">.</span><span class="token keyword">await</span>
+        <span class="token punctuation">.</span>security_info
+        <span class="token punctuation">.</span>guest_hook_path<span class="token punctuation">,</span>
+    kernel_modules<span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+
+<span class="token keyword">self</span><span class="token punctuation">.</span>agent
+    <span class="token punctuation">.</span><span class="token function">create_sandbox</span><span class="token punctuation">(</span>req<span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span>
+    <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"create sandbox"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+
+inner<span class="token punctuation">.</span>state <span class="token operator">=</span> <span class="token class-name">SandboxState</span><span class="token punctuation">::</span><span class="token class-name">Running</span><span class="token punctuation">;</span>
+
+<span class="token comment">// get and store guest details</span>
+<span class="token keyword">self</span><span class="token punctuation">.</span><span class="token function">store_guest_details</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span>
+    <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"failed to store guest details"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<ol start="7">
+<li>持续监听 guest OOM 事件，转成 host 事件上报给上层”，启动 sandbox 健康检查监控。最后保存沙箱状态。</li>
+</ol>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token keyword">let</span> agent <span class="token operator">=</span> <span class="token keyword">self</span><span class="token punctuation">.</span>agent<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> sender <span class="token operator">=</span> <span class="token keyword">self</span><span class="token punctuation">.</span>msg_sender<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token macro property">info!</span><span class="token punctuation">(</span><span class="token macro property">sl!</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"oom watcher start"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token namespace">tokio<span class="token punctuation">::</span></span><span class="token function">spawn</span><span class="token punctuation">(</span><span class="token keyword">async</span> <span class="token keyword">move</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">loop</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">match</span> agent
+            <span class="token punctuation">.</span><span class="token function">get_oom_event</span><span class="token punctuation">(</span><span class="token namespace">agent<span class="token punctuation">::</span></span><span class="token class-name">Empty</span><span class="token punctuation">::</span><span class="token function">new</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+            <span class="token punctuation">.</span><span class="token keyword">await</span>
+            <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"get oom event"</span><span class="token punctuation">)</span>
+        <span class="token punctuation">&#123;</span>
+            <span class="token class-name">Ok</span><span class="token punctuation">(</span>resp<span class="token punctuation">)</span> <span class="token operator">=></span> <span class="token punctuation">&#123;</span>
+                <span class="token keyword">let</span> cid <span class="token operator">=</span> <span class="token operator">&amp;</span>resp<span class="token punctuation">.</span>container_id<span class="token punctuation">;</span>
+                <span class="token macro property">warn!</span><span class="token punctuation">(</span><span class="token macro property">sl!</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"send oom event for container &#123;&#125;"</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>cid<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token keyword">let</span> event <span class="token operator">=</span> <span class="token class-name">TaskOOM</span> <span class="token punctuation">&#123;</span>
+                    container_id<span class="token punctuation">:</span> cid<span class="token punctuation">.</span><span class="token function">to_string</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+                    <span class="token punctuation">..</span><span class="token class-name">Default</span><span class="token punctuation">::</span><span class="token function">default</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+                <span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+                <span class="token keyword">let</span> msg <span class="token operator">=</span> <span class="token class-name">Message</span><span class="token punctuation">::</span><span class="token function">new</span><span class="token punctuation">(</span><span class="token class-name">Action</span><span class="token punctuation">::</span><span class="token class-name">Event</span><span class="token punctuation">(</span><span class="token class-name">Arc</span><span class="token punctuation">::</span><span class="token function">new</span><span class="token punctuation">(</span>event<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token keyword">let</span> lock_sender <span class="token operator">=</span> sender<span class="token punctuation">.</span><span class="token function">lock</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span><span class="token punctuation">;</span>
+                <span class="token keyword">if</span> <span class="token keyword">let</span> <span class="token class-name">Err</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span> <span class="token operator">=</span> lock_sender<span class="token punctuation">.</span><span class="token function">send</span><span class="token punctuation">(</span>msg<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span><span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"send event"</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+                    <span class="token macro property">error!</span><span class="token punctuation">(</span>
+                        <span class="token macro property">sl!</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+                        <span class="token string">"failed to send oom event for &#123;&#125; error &#123;:?&#125;"</span><span class="token punctuation">,</span> cid<span class="token punctuation">,</span> err
+                    <span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token punctuation">&#125;</span>
+            <span class="token punctuation">&#125;</span>
+            <span class="token class-name">Err</span><span class="token punctuation">(</span>err<span class="token punctuation">)</span> <span class="token operator">=></span> <span class="token punctuation">&#123;</span>
+                <span class="token macro property">warn!</span><span class="token punctuation">(</span><span class="token macro property">sl!</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"failed to get oom event error &#123;:?&#125;"</span><span class="token punctuation">,</span> err<span class="token punctuation">)</span><span class="token punctuation">;</span>
+                <span class="token keyword">break</span><span class="token punctuation">;</span>
+            <span class="token punctuation">&#125;</span>
+        <span class="token punctuation">&#125;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">self</span><span class="token punctuation">.</span>monitor<span class="token punctuation">.</span><span class="token function">start</span><span class="token punctuation">(</span>id<span class="token punctuation">,</span> <span class="token keyword">self</span><span class="token punctuation">.</span>agent<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">self</span><span class="token punctuation">.</span><span class="token function">save</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span><span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"save state"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+<span class="token class-name">Ok</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>Hypervisor trait 定义了一个虚拟机管理器的接口，包括准备虚拟机、启动、停止、等待、暂停、保存、恢复、调整 vCPU 和内存等方法。这些方法都是异步的，返回一个 Result 类型，表示操作是否成功。</p>
+<pre class="line-numbers language-rust" data-language="rust"><div class="caption"><span>crates/hypervisor/src/lib.rs</span></div><code class="language-rust"><span class="token keyword">pub</span> <span class="token keyword">trait</span> <span class="token type-definition class-name">Hypervisor</span><span class="token punctuation">:</span> <span class="token namespace">std<span class="token punctuation">::</span>fmt<span class="token punctuation">::</span></span><span class="token class-name">Debug</span> <span class="token operator">+</span> <span class="token class-name">Send</span> <span class="token operator">+</span> <span class="token class-name">Sync</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// vm manager</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">prepare_vm</span><span class="token punctuation">(</span>
+        <span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">,</span>
+        id<span class="token punctuation">:</span> <span class="token operator">&amp;</span><span class="token keyword">str</span><span class="token punctuation">,</span>
+        netns<span class="token punctuation">:</span> <span class="token class-name">Option</span><span class="token operator">&lt;</span><span class="token class-name">String</span><span class="token operator">></span><span class="token punctuation">,</span>
+        annotations<span class="token punctuation">:</span> <span class="token operator">&amp;</span><span class="token class-name">HashMap</span><span class="token operator">&lt;</span><span class="token class-name">String</span><span class="token punctuation">,</span> <span class="token class-name">String</span><span class="token operator">></span><span class="token punctuation">,</span>
+        selinux_label<span class="token punctuation">:</span> <span class="token class-name">Option</span><span class="token operator">&lt;</span><span class="token class-name">String</span><span class="token operator">></span><span class="token punctuation">,</span>
+    <span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">start_vm</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">,</span> timeout<span class="token punctuation">:</span> <span class="token keyword">i32</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">stop_vm</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">wait_vm</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token keyword">i32</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">pause_vm</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">save_vm</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">resume_vm</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">resize_vcpu</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">,</span> old_vcpus<span class="token punctuation">:</span> <span class="token keyword">u32</span><span class="token punctuation">,</span> new_vcpus<span class="token punctuation">:</span> <span class="token keyword">u32</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token keyword">u32</span><span class="token punctuation">,</span> <span class="token keyword">u32</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">;</span> <span class="token comment">// returns (old_vcpus, new_vcpus)</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">resize_memory</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">,</span> new_mem_mb<span class="token punctuation">:</span> <span class="token keyword">u32</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token keyword">u32</span><span class="token punctuation">,</span> <span class="token class-name">MemoryConfig</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token punctuation">...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>crates&#x2F;agent&#x2F;src&#x2F;kata&#x2F;agent.rs 中通过宏给 KataAgent 实现 Agent trait 的各个 RPC 方法，将 req 转化为 protobuf 请求，拿到 gRPC&#x2F;ttrpc 客户端后调用对应的 RPC 方法，并把结果转化为 agent 的响应类型返回。</p>
+<h2 id="5-ContainerManager-trait-Container"><a href="#5-ContainerManager-trait-Container" class="headerlink" title="5. ContainerManager trait, Container"></a>5. ContainerManager trait, Container</h2><p>RuntimeHandlerManager 中定义了 handler_task_message 方法来处理 TaskRequest 消息，其中定义了创建容器的流程：</p>
+<ol>
+<li>读取 OCI spec 文件，构建 container spec 和 state 对象，调用 task_init_runtime_instance 方法确保 RuntimeInstance 已经初始化并且沙箱已经启动。</li>
+</ol>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token keyword">let</span> bundler_path <span class="token operator">=</span> <span class="token macro property">format!</span><span class="token punctuation">(</span>
+    <span class="token string">"&#123;&#125;/&#123;&#125;"</span><span class="token punctuation">,</span>
+    container_config<span class="token punctuation">.</span>bundle<span class="token punctuation">,</span>
+    <span class="token namespace">spec<span class="token punctuation">::</span></span><span class="token constant">OCI_SPEC_CONFIG_FILE_NAME</span>
+<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> <span class="token keyword">mut</span> spec <span class="token operator">=</span> <span class="token namespace">oci<span class="token punctuation">::</span></span><span class="token class-name">Spec</span><span class="token punctuation">::</span><span class="token function">load</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>bundler_path<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"load spec"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> state <span class="token operator">=</span> <span class="token namespace">spec<span class="token punctuation">::</span></span><span class="token class-name">State</span> <span class="token punctuation">&#123;</span>
+    version<span class="token punctuation">:</span> spec<span class="token punctuation">.</span><span class="token function">version</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+    id<span class="token punctuation">:</span> container_config<span class="token punctuation">.</span>container_id<span class="token punctuation">.</span><span class="token function">to_string</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+    status<span class="token punctuation">:</span> <span class="token namespace">spec<span class="token punctuation">::</span></span><span class="token class-name">ContainerState</span><span class="token punctuation">::</span><span class="token class-name">Creating</span><span class="token punctuation">,</span>
+    pid<span class="token punctuation">:</span> <span class="token number">0</span><span class="token punctuation">,</span>
+    bundle<span class="token punctuation">:</span> container_config<span class="token punctuation">.</span>bundle<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+    annotations<span class="token punctuation">:</span> spec<span class="token punctuation">.</span><span class="token function">annotations</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">unwrap_or_default</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+
+<span class="token keyword">self</span><span class="token punctuation">.</span><span class="token function">task_init_runtime_instance</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">mut</span> spec<span class="token punctuation">,</span> <span class="token operator">&amp;</span>state<span class="token punctuation">,</span> <span class="token operator">&amp;</span>container_config<span class="token punctuation">.</span>options<span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span>
+    <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"try init runtime instance"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> instance <span class="token operator">=</span> <span class="token keyword">self</span>
+    <span class="token punctuation">.</span><span class="token function">get_runtime_instance</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span>
+    <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"get runtime instance"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+
+instance
+    <span class="token punctuation">.</span>sandbox
+    <span class="token punctuation">.</span><span class="token function">start</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span>
+    <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"start sandbox in task handler"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<ol start="2">
+<li>调用 container_manager 的 create_container 方法创建容器，得到 shim 进程的 PID。然后在一个新的异步任务中调用 sandbox 的 wait 方法监控 shim 进程。最后通过 msg_sender 发送 TaskCreate 事件给上层。</li>
+</ol>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token keyword">let</span> bundle <span class="token operator">=</span> container_config<span class="token punctuation">.</span>bundle<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> container_id <span class="token operator">=</span> container_config<span class="token punctuation">.</span>container_id<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> shim_pid <span class="token operator">=</span> instance
+    <span class="token punctuation">.</span>container_manager
+    <span class="token punctuation">.</span><span class="token function">create_container</span><span class="token punctuation">(</span>container_config<span class="token punctuation">,</span> spec<span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span>
+    <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"create container"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+
+<span class="token keyword">let</span> container_manager <span class="token operator">=</span> instance<span class="token punctuation">.</span>container_manager<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> process_id <span class="token operator">=</span>
+    <span class="token class-name">ContainerProcess</span><span class="token punctuation">::</span><span class="token function">new</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>container_id<span class="token punctuation">,</span> <span class="token string">""</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"create container process"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> pid <span class="token operator">=</span> shim_pid<span class="token punctuation">.</span>pid<span class="token punctuation">;</span>
+<span class="token namespace">tokio<span class="token punctuation">::</span></span><span class="token function">spawn</span><span class="token punctuation">(</span><span class="token keyword">async</span> <span class="token keyword">move</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">let</span> result <span class="token operator">=</span> instance
+        <span class="token punctuation">.</span>sandbox
+        <span class="token punctuation">.</span><span class="token function">wait_process</span><span class="token punctuation">(</span>container_manager<span class="token punctuation">,</span> process_id<span class="token punctuation">,</span> pid<span class="token punctuation">)</span>
+        <span class="token punctuation">.</span><span class="token keyword">await</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token keyword">let</span> <span class="token class-name">Err</span><span class="token punctuation">(</span>e<span class="token punctuation">)</span> <span class="token operator">=</span> result <span class="token punctuation">&#123;</span>
+        <span class="token macro property">error!</span><span class="token punctuation">(</span><span class="token macro property">sl!</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"sandbox wait process error: &#123;:?&#125;"</span><span class="token punctuation">,</span> e<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token keyword">let</span> msg_sender <span class="token operator">=</span> <span class="token keyword">self</span><span class="token punctuation">.</span>inner<span class="token punctuation">.</span><span class="token function">read</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span><span class="token punctuation">.</span>msg_sender<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> event <span class="token operator">=</span> <span class="token class-name">TaskCreate</span> <span class="token punctuation">&#123;</span>
+    container_id<span class="token punctuation">,</span>
+    bundle<span class="token punctuation">,</span>
+    pid<span class="token punctuation">,</span>
+    <span class="token punctuation">..</span><span class="token class-name">Default</span><span class="token punctuation">::</span><span class="token function">default</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> msg <span class="token operator">=</span> <span class="token class-name">Message</span><span class="token punctuation">::</span><span class="token function">new</span><span class="token punctuation">(</span><span class="token class-name">Action</span><span class="token punctuation">::</span><span class="token class-name">Event</span><span class="token punctuation">(</span><span class="token class-name">Arc</span><span class="token punctuation">::</span><span class="token function">new</span><span class="token punctuation">(</span>event<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+msg_sender
+    <span class="token punctuation">.</span><span class="token function">send</span><span class="token punctuation">(</span>msg<span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span>
+    <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"send task create event"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+
+<span class="token class-name">Ok</span><span class="token punctuation">(</span><span class="token class-name">TaskResponse</span><span class="token punctuation">::</span><span class="token class-name">CreateContainer</span><span class="token punctuation">(</span>shim_pid<span class="token punctuation">)</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>ContainerManager trait 定义了一个容器管理器的接口，包括创建、暂停、恢复、获取统计信息、更新和连接容器等方法。这些方法也是异步的，返回一个 Result 类型，表示操作是否成功。</p>
+<pre class="line-numbers language-rust" data-language="rust"><div class="caption"><span>crates/runtimes/common/src/container_manager.rs</span></div><code class="language-rust"><span class="token keyword">pub</span> <span class="token keyword">trait</span> <span class="token type-definition class-name">ContainerManager</span><span class="token punctuation">:</span> <span class="token class-name">Send</span> <span class="token operator">+</span> <span class="token class-name">Sync</span> <span class="token punctuation">&#123;</span>
+    <span class="token comment">// container lifecycle</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">create_container</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">,</span> config<span class="token punctuation">:</span> <span class="token class-name">ContainerConfig</span><span class="token punctuation">,</span> spec<span class="token punctuation">:</span> <span class="token namespace">oci<span class="token punctuation">::</span></span><span class="token class-name">Spec</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token constant">PID</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">pause_container</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">,</span> container_id<span class="token punctuation">:</span> <span class="token operator">&amp;</span><span class="token class-name">ContainerID</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">resume_container</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">,</span> container_id<span class="token punctuation">:</span> <span class="token operator">&amp;</span><span class="token class-name">ContainerID</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">stats_container</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">,</span> container_id<span class="token punctuation">:</span> <span class="token operator">&amp;</span><span class="token class-name">ContainerID</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token class-name">StatsInfo</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">update_container</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">,</span> req<span class="token punctuation">:</span> <span class="token class-name">UpdateRequest</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token keyword">async</span> <span class="token keyword">fn</span> <span class="token function-definition function">connect_container</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">,</span> container_id<span class="token punctuation">:</span> <span class="token operator">&amp;</span><span class="token class-name">ContainerID</span><span class="token punctuation">)</span> <span class="token punctuation">-></span> <span class="token class-name">Result</span><span class="token operator">&lt;</span><span class="token constant">PID</span><span class="token operator">></span><span class="token punctuation">;</span>
+    <span class="token punctuation">...</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>VirtContainerManager 是一个实现了 ContainerManager trait 的结构体</p>
+<p>containers 是一个 HashMap，键是容器 ID，值是 Container 结构体。Container 结构体包含了容器的 PID、容器 ID、配置、规范、内部状态、代理对象、资源管理器和日志记录器等信息。</p>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token keyword">pub</span> <span class="token keyword">struct</span> <span class="token type-definition class-name">VirtContainerManager</span> <span class="token punctuation">&#123;</span>
+    sid<span class="token punctuation">:</span> <span class="token class-name">String</span><span class="token punctuation">,</span>
+    pid<span class="token punctuation">:</span> <span class="token keyword">u32</span><span class="token punctuation">,</span>
+    containers<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token class-name">RwLock</span><span class="token operator">&lt;</span><span class="token class-name">HashMap</span><span class="token operator">&lt;</span><span class="token class-name">String</span><span class="token punctuation">,</span> <span class="token class-name">Container</span><span class="token operator">>></span><span class="token operator">></span><span class="token punctuation">,</span>
+    resource_manager<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token class-name">ResourceManager</span><span class="token operator">></span><span class="token punctuation">,</span>
+    agent<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token keyword">dyn</span> <span class="token class-name">Agent</span><span class="token operator">></span><span class="token punctuation">,</span>
+    hypervisor<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token keyword">dyn</span> <span class="token class-name">Hypervisor</span><span class="token operator">></span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>VirtContainerManager 实现了 ContainerManager trait 的 create_container 方法，该方法在 RuntimeHandlerManager 的 handler_task_message 方法中被调用来创建容器。</p>
+<ol>
+<li>新建 Container 对象</li>
+</ol>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token keyword">let</span> <span class="token keyword">mut</span> container <span class="token operator">=</span> <span class="token class-name">Container</span><span class="token punctuation">::</span><span class="token function">new</span><span class="token punctuation">(</span>
+    <span class="token keyword">self</span><span class="token punctuation">.</span>pid<span class="token punctuation">,</span>
+    config<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+    spec<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+    <span class="token keyword">self</span><span class="token punctuation">.</span>agent<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+    <span class="token keyword">self</span><span class="token punctuation">.</span>resource_manager<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+    <span class="token keyword">self</span><span class="token punctuation">.</span>hypervisor<span class="token punctuation">.</span><span class="token function">get_passfd_listener_addr</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span><span class="token punctuation">.</span><span class="token function">ok</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+<span class="token punctuation">)</span>
+<span class="token punctuation">.</span><span class="token keyword">await</span>
+<span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"new container"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<ol start="2">
+<li>准备 ContainerCreate Hooks 元信息，在新的网络命名空间中执行 CreateContainer Hooks（如果有的话）</li>
+</ol>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token comment">// CreateContainer Hooks:</span>
+<span class="token comment">// * should be run in vmm namespace (hook path in runtime namespace)</span>
+<span class="token comment">// * should be run after the vm is started, before container is created, and after CreateRuntime Hooks</span>
+<span class="token comment">// * spec details: https://github.com/opencontainers/runtime-spec/blob/c1662686cff159595277b79322d0272f5182941b/config.md#createcontainer-hooks</span>
+<span class="token keyword">let</span> vmm_master_tid <span class="token operator">=</span> <span class="token keyword">self</span><span class="token punctuation">.</span>hypervisor<span class="token punctuation">.</span><span class="token function">get_vmm_master_tid</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span><span class="token operator">?</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> vmm_ns_path <span class="token operator">=</span> <span class="token keyword">self</span><span class="token punctuation">.</span>hypervisor<span class="token punctuation">.</span><span class="token function">get_ns_path</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span><span class="token operator">?</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> vmm_netns_path <span class="token operator">=</span> <span class="token macro property">format!</span><span class="token punctuation">(</span><span class="token string">"&#123;&#125;/&#123;&#125;"</span><span class="token punctuation">,</span> vmm_ns_path<span class="token punctuation">,</span> <span class="token string">"net"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> state <span class="token operator">=</span> <span class="token namespace">spec<span class="token punctuation">::</span></span><span class="token class-name">State</span> <span class="token punctuation">&#123;</span>
+    version<span class="token punctuation">:</span> spec<span class="token punctuation">.</span><span class="token function">version</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+    id<span class="token punctuation">:</span> config<span class="token punctuation">.</span>container_id<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+    status<span class="token punctuation">:</span> <span class="token namespace">spec<span class="token punctuation">::</span></span><span class="token class-name">ContainerState</span><span class="token punctuation">::</span><span class="token class-name">Creating</span><span class="token punctuation">,</span>
+    pid<span class="token punctuation">:</span> vmm_master_tid <span class="token keyword">as</span> <span class="token keyword">i32</span><span class="token punctuation">,</span>
+    bundle<span class="token punctuation">:</span> config<span class="token punctuation">.</span>bundle<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+    annotations<span class="token punctuation">:</span> spec<span class="token punctuation">.</span><span class="token function">annotations</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">unwrap_or_default</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+<span class="token comment">// new scope, CreateContainer hooks in which will execute in a new network namespace</span>
+<span class="token punctuation">&#123;</span>
+    <span class="token keyword">let</span> _netns_guard <span class="token operator">=</span> <span class="token class-name">NetnsGuard</span><span class="token punctuation">::</span><span class="token function">new</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>vmm_netns_path<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"vmm netns guard"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token keyword">let</span> <span class="token class-name">Some</span><span class="token punctuation">(</span>hooks<span class="token punctuation">)</span> <span class="token operator">=</span> spec<span class="token punctuation">.</span><span class="token function">hooks</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">as_ref</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        <span class="token keyword">let</span> <span class="token keyword">mut</span> create_container_hook_states <span class="token operator">=</span> <span class="token class-name">HookStates</span><span class="token punctuation">::</span><span class="token function">new</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        create_container_hook_states
+            <span class="token punctuation">.</span><span class="token function">execute_hooks</span><span class="token punctuation">(</span><span class="token function">from_hooks</span><span class="token punctuation">(</span>hooks<span class="token punctuation">.</span><span class="token function">create_container</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token class-name">Some</span><span class="token punctuation">(</span>state<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<ol start="3">
+<li>真正调用 container 的 create 方法创建容器。</li>
+</ol>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token keyword">let</span> <span class="token keyword">mut</span> containers <span class="token operator">=</span> <span class="token keyword">self</span><span class="token punctuation">.</span>containers<span class="token punctuation">.</span><span class="token function">write</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span><span class="token punctuation">;</span>
+<span class="token keyword">if</span> <span class="token keyword">let</span> <span class="token class-name">Err</span><span class="token punctuation">(</span>e<span class="token punctuation">)</span> <span class="token operator">=</span> container<span class="token punctuation">.</span><span class="token function">create</span><span class="token punctuation">(</span>spec<span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span> <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> <span class="token keyword">let</span> <span class="token class-name">Err</span><span class="token punctuation">(</span>inner_e<span class="token punctuation">)</span> <span class="token operator">=</span> container<span class="token punctuation">.</span><span class="token function">cleanup</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span> <span class="token punctuation">&#123;</span>
+        <span class="token macro property">warn!</span><span class="token punctuation">(</span><span class="token macro property">sl!</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">"failed to cleanup container &#123;:?&#125;"</span><span class="token punctuation">,</span> inner_e<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token keyword">return</span> <span class="token class-name">Err</span><span class="token punctuation">(</span>e<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span>
+
+containers<span class="token punctuation">.</span><span class="token function">insert</span><span class="token punctuation">(</span>container<span class="token punctuation">.</span>container_id<span class="token punctuation">.</span><span class="token function">to_string</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> container<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token class-name">Ok</span><span class="token punctuation">(</span><span class="token constant">PID</span> <span class="token punctuation">&#123;</span> pid<span class="token punctuation">:</span> <span class="token keyword">self</span><span class="token punctuation">.</span>pid <span class="token punctuation">&#125;</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>Container 实现了 create，pause，resume，stats，update 和 connect 等方法，这些方法会被 VirtContainerManager 调用来管理容器的生命周期和状态。并通过 agent 通信来执行相应的操作。</p>
+<pre class="line-numbers language-rust" data-language="rust"><div class="caption"><span>crates/runtimes/virt_container/src/container_manager/container.rs</span></div><code class="language-rust"><span class="token keyword">pub</span> <span class="token keyword">struct</span> <span class="token type-definition class-name">Container</span> <span class="token punctuation">&#123;</span>
+    pid<span class="token punctuation">:</span> <span class="token keyword">u32</span><span class="token punctuation">,</span>
+    <span class="token keyword">pub</span> container_id<span class="token punctuation">:</span> <span class="token class-name">ContainerID</span><span class="token punctuation">,</span>
+    config<span class="token punctuation">:</span> <span class="token class-name">ContainerConfig</span><span class="token punctuation">,</span>
+    spec<span class="token punctuation">:</span> <span class="token namespace">oci<span class="token punctuation">::</span></span><span class="token class-name">Spec</span><span class="token punctuation">,</span>
+    inner<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token class-name">RwLock</span><span class="token operator">&lt;</span><span class="token class-name">ContainerInner</span><span class="token operator">>></span><span class="token punctuation">,</span>
+    agent<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token keyword">dyn</span> <span class="token class-name">Agent</span><span class="token operator">></span><span class="token punctuation">,</span>
+    resource_manager<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token class-name">ResourceManager</span><span class="token operator">></span><span class="token punctuation">,</span>
+    logger<span class="token punctuation">:</span> <span class="token namespace">slog<span class="token punctuation">::</span></span><span class="token class-name">Logger</span><span class="token punctuation">,</span>
+    <span class="token keyword">pub</span><span class="token punctuation">(</span><span class="token keyword">crate</span><span class="token punctuation">)</span> passfd_listener_addr<span class="token punctuation">:</span> <span class="token class-name">Option</span><span class="token operator">&lt;</span><span class="token punctuation">(</span><span class="token class-name">String</span><span class="token punctuation">,</span> <span class="token keyword">u32</span><span class="token punctuation">)</span><span class="token operator">></span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>ContainerInner 是一个结构体，包含了容器的代理对象、日志记录器、初始化进程、执行进程、根文件系统、卷和 Linux 资源等信息。</p>
+<pre class="line-numbers language-rust" data-language="rust"><div class="caption"><span>crates/runtimes/virt_container/src/container_manager/container_inner.rs</span></div><code class="language-rust"><span class="token keyword">pub</span> <span class="token keyword">struct</span> <span class="token type-definition class-name">ContainerInner</span> <span class="token punctuation">&#123;</span>
+    agent<span class="token punctuation">:</span> <span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token keyword">dyn</span> <span class="token class-name">Agent</span><span class="token operator">></span><span class="token punctuation">,</span>
+    logger<span class="token punctuation">:</span> <span class="token namespace">slog<span class="token punctuation">::</span></span><span class="token class-name">Logger</span><span class="token punctuation">,</span>
+    <span class="token keyword">pub</span><span class="token punctuation">(</span><span class="token keyword">crate</span><span class="token punctuation">)</span> init_process<span class="token punctuation">:</span> <span class="token class-name">Process</span><span class="token punctuation">,</span>
+    <span class="token keyword">pub</span><span class="token punctuation">(</span><span class="token keyword">crate</span><span class="token punctuation">)</span> exec_processes<span class="token punctuation">:</span> <span class="token class-name">HashMap</span><span class="token operator">&lt;</span><span class="token class-name">String</span><span class="token punctuation">,</span> <span class="token class-name">Exec</span><span class="token operator">></span><span class="token punctuation">,</span>
+    <span class="token keyword">pub</span><span class="token punctuation">(</span><span class="token keyword">crate</span><span class="token punctuation">)</span> rootfs<span class="token punctuation">:</span> <span class="token class-name">Vec</span><span class="token operator">&lt;</span><span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token keyword">dyn</span> <span class="token class-name">Rootfs</span><span class="token operator">>></span><span class="token punctuation">,</span>
+    <span class="token keyword">pub</span><span class="token punctuation">(</span><span class="token keyword">crate</span><span class="token punctuation">)</span> volumes<span class="token punctuation">:</span> <span class="token class-name">Vec</span><span class="token operator">&lt;</span><span class="token class-name">Arc</span><span class="token operator">&lt;</span><span class="token keyword">dyn</span> <span class="token class-name">Volume</span><span class="token operator">>></span><span class="token punctuation">,</span>
+    <span class="token keyword">pub</span><span class="token punctuation">(</span><span class="token keyword">crate</span><span class="token punctuation">)</span> linux_resources<span class="token punctuation">:</span> <span class="token class-name">Option</span><span class="token operator">&lt;</span><span class="token class-name">LinuxResources</span><span class="token operator">></span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<p>Container 中实现了 create 方法，该方法负责创建容器：</p>
+<ol>
+<li>规范处理与注入</li>
+</ol>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token comment">// process oci spec</span>
+<span class="token keyword">let</span> <span class="token keyword">mut</span> inner <span class="token operator">=</span> <span class="token keyword">self</span><span class="token punctuation">.</span>inner<span class="token punctuation">.</span><span class="token function">write</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> toml_config <span class="token operator">=</span> <span class="token keyword">self</span><span class="token punctuation">.</span>resource_manager<span class="token punctuation">.</span><span class="token function">config</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> config <span class="token operator">=</span> <span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">.</span>config<span class="token punctuation">;</span>
+<span class="token keyword">let</span> sandbox_pidns <span class="token operator">=</span> <span class="token function">is_pid_namespace_enabled</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>spec<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> disable_guest_selinux <span class="token operator">=</span> <span class="token keyword">match</span> toml_config
+    <span class="token punctuation">.</span>hypervisor
+    <span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>toml_config<span class="token punctuation">.</span>runtime<span class="token punctuation">.</span>hypervisor_name<span class="token punctuation">)</span>
+<span class="token punctuation">&#123;</span>
+    <span class="token class-name">Some</span><span class="token punctuation">(</span>hypervisor_config<span class="token punctuation">)</span> <span class="token operator">=></span> hypervisor_config<span class="token punctuation">.</span>disable_guest_selinux<span class="token punctuation">,</span>
+    <span class="token comment">// This shouldn't happen due to how logic in the config crate works</span>
+    <span class="token comment">// but we need to handle it anyway so we stick with the default</span>
+    <span class="token comment">// value of disable_guest_selinux in configuration.toml which</span>
+    <span class="token comment">// is 'true'.</span>
+    <span class="token class-name">None</span> <span class="token operator">=></span> <span class="token boolean">true</span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> annotations <span class="token operator">=</span> spec<span class="token punctuation">.</span><span class="token function">annotations</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">unwrap_or_default</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> container_typ <span class="token operator">=</span> <span class="token function">container_type</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>spec<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> pod_type_anno <span class="token operator">=</span> <span class="token keyword">if</span> container_typ<span class="token punctuation">.</span><span class="token function">is_pod_container</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token punctuation">(</span><span class="token constant">CONTAINER_TYPE_KEY</span><span class="token punctuation">.</span><span class="token function">to_string</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token constant">POD_CONTAINER</span><span class="token punctuation">.</span><span class="token function">to_string</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span> <span class="token keyword">else</span> <span class="token punctuation">&#123;</span>
+    <span class="token punctuation">(</span><span class="token constant">CONTAINER_TYPE_KEY</span><span class="token punctuation">.</span><span class="token function">to_string</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token constant">POD_SANDBOX</span><span class="token punctuation">.</span><span class="token function">to_string</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+
+<span class="token keyword">let</span> bund_path_anno <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token constant">BUNDLE_PATH_KEY</span><span class="token punctuation">.</span><span class="token function">to_string</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> config<span class="token punctuation">.</span>bundle<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> updated_annotations <span class="token operator">=</span> <span class="token function">update_ocispec_annotations</span><span class="token punctuation">(</span>
+    <span class="token operator">&amp;</span>annotations<span class="token punctuation">,</span>
+    <span class="token operator">&amp;</span><span class="token punctuation">[</span><span class="token constant">KATA_ANNO_CFG_HYPERVISOR_INIT_DATA</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
+    <span class="token operator">&amp;</span><span class="token punctuation">[</span>pod_type_anno<span class="token punctuation">,</span> bund_path_anno<span class="token punctuation">]</span><span class="token punctuation">,</span>
+<span class="token punctuation">)</span><span class="token punctuation">;</span>
+spec<span class="token punctuation">.</span><span class="token function">set_annotations</span><span class="token punctuation">(</span><span class="token class-name">Some</span><span class="token punctuation">(</span>updated_annotations<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token function">amend_spec</span><span class="token punctuation">(</span>
+    <span class="token operator">&amp;</span><span class="token keyword">mut</span> spec<span class="token punctuation">,</span>
+    toml_config<span class="token punctuation">.</span>runtime<span class="token punctuation">.</span>disable_guest_seccomp<span class="token punctuation">,</span>
+    disable_guest_selinux<span class="token punctuation">,</span>
+    toml_config<span class="token punctuation">.</span>runtime<span class="token punctuation">.</span>disable_guest_empty_dir<span class="token punctuation">,</span>
+<span class="token punctuation">)</span>
+<span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"amend spec"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<ol start="2">
+<li>处理根文件系统，卷等资源，并把它们注入到 OCI spec 中。</li>
+</ol>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token comment">// get mutable root from oci spec</span>
+<span class="token keyword">let</span> root <span class="token operator">=</span> <span class="token keyword">match</span> spec<span class="token punctuation">.</span><span class="token function">root_mut</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    <span class="token class-name">Some</span><span class="token punctuation">(</span>root<span class="token punctuation">)</span> <span class="token operator">=></span> root<span class="token punctuation">,</span>
+    <span class="token class-name">None</span> <span class="token operator">=></span> <span class="token keyword">return</span> <span class="token class-name">Err</span><span class="token punctuation">(</span><span class="token macro property">anyhow!</span><span class="token punctuation">(</span><span class="token string">"spec miss root field"</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+
+<span class="token comment">// handler rootfs</span>
+<span class="token keyword">let</span> rootfs <span class="token operator">=</span> <span class="token keyword">self</span>
+    <span class="token punctuation">.</span>resource_manager
+    <span class="token punctuation">.</span><span class="token function">handler_rootfs</span><span class="token punctuation">(</span>
+        <span class="token operator">&amp;</span>config<span class="token punctuation">.</span>container_id<span class="token punctuation">,</span>
+        root<span class="token punctuation">,</span>
+        <span class="token operator">&amp;</span>config<span class="token punctuation">.</span>bundle<span class="token punctuation">,</span>
+        <span class="token operator">&amp;</span>config<span class="token punctuation">.</span>rootfs_mounts<span class="token punctuation">,</span>
+        <span class="token operator">&amp;</span>updated_annotations<span class="token punctuation">,</span>
+    <span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span>
+    <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"handler rootfs"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+
+<span class="token comment">// update rootfs</span>
+root<span class="token punctuation">.</span><span class="token function">set_path</span><span class="token punctuation">(</span>
+    rootfs
+        <span class="token punctuation">.</span><span class="token function">get_guest_rootfs_path</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token punctuation">.</span><span class="token keyword">await</span>
+        <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"get guest rootfs path"</span><span class="token punctuation">)</span><span class="token operator">?</span>
+        <span class="token punctuation">.</span><span class="token function">into</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token keyword">let</span> <span class="token keyword">mut</span> storages <span class="token operator">=</span> <span class="token macro property">vec!</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+<span class="token keyword">if</span> <span class="token keyword">let</span> <span class="token class-name">Some</span><span class="token punctuation">(</span>storage<span class="token punctuation">)</span> <span class="token operator">=</span> rootfs<span class="token punctuation">.</span><span class="token function">get_storage</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span> <span class="token punctuation">&#123;</span>
+    storages<span class="token punctuation">.</span><span class="token function">push</span><span class="token punctuation">(</span>storage<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span>
+inner<span class="token punctuation">.</span>rootfs<span class="token punctuation">.</span><span class="token function">push</span><span class="token punctuation">(</span>rootfs<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// handler volumes</span>
+<span class="token keyword">let</span> volumes <span class="token operator">=</span> <span class="token keyword">self</span>
+    <span class="token punctuation">.</span>resource_manager
+    <span class="token punctuation">.</span><span class="token function">handler_volumes</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>config<span class="token punctuation">.</span>container_id<span class="token punctuation">,</span> <span class="token operator">&amp;</span>spec<span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span>
+    <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"handler volumes"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> <span class="token keyword">mut</span> oci_mounts <span class="token operator">=</span> <span class="token macro property">vec!</span><span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+<span class="token keyword">for</span> v <span class="token keyword">in</span> volumes <span class="token punctuation">&#123;</span>
+    <span class="token keyword">let</span> <span class="token keyword">mut</span> volume_mounts <span class="token operator">=</span> v<span class="token punctuation">.</span><span class="token function">get_volume_mount</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"get volume mount"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token operator">!</span>volume_mounts<span class="token punctuation">.</span><span class="token function">is_empty</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        oci_mounts<span class="token punctuation">.</span><span class="token function">append</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">mut</span> volume_mounts<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+
+    <span class="token keyword">let</span> <span class="token keyword">mut</span> s <span class="token operator">=</span> v<span class="token punctuation">.</span><span class="token function">get_storage</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"get storage"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+    <span class="token keyword">if</span> <span class="token operator">!</span>s<span class="token punctuation">.</span><span class="token function">is_empty</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        storages<span class="token punctuation">.</span><span class="token function">append</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">mut</span> s<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+    inner<span class="token punctuation">.</span>volumes<span class="token punctuation">.</span><span class="token function">push</span><span class="token punctuation">(</span>v<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span>
+spec<span class="token punctuation">.</span><span class="token function">set_mounts</span><span class="token punctuation">(</span><span class="token class-name">Some</span><span class="token punctuation">(</span>oci_mounts<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<ol start="3">
+<li>从 OCI spec 中获取 Linux 资源配置，调用 resource_manager 的 handler_devices 方法处理设备资源，并把设备资源注入到 OCI spec 中。更新 OCI spec 中的 Linux 资源配置，包括 vCPU、内存和 cgroups 等。</li>
+</ol>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token keyword">let</span> linux <span class="token operator">=</span> spec
+    <span class="token punctuation">.</span><span class="token function">linux</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token function">as_ref</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"OCI spec missing linux field"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+
+<span class="token keyword">let</span> container_devices <span class="token operator">=</span> <span class="token keyword">self</span>
+    <span class="token punctuation">.</span>resource_manager
+    <span class="token punctuation">.</span><span class="token function">handler_devices</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>config<span class="token punctuation">.</span>container_id<span class="token punctuation">,</span> linux<span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span><span class="token operator">?</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> devices_agent <span class="token operator">=</span> <span class="token function">annotate_container_devices</span><span class="token punctuation">(</span><span class="token operator">&amp;</span><span class="token keyword">mut</span> spec<span class="token punctuation">,</span> container_devices<span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"annotate container devices failed"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+
+<span class="token comment">// update vcpus, mems and host cgroups</span>
+<span class="token keyword">let</span> resources <span class="token operator">=</span> <span class="token keyword">self</span>
+    <span class="token punctuation">.</span>resource_manager
+    <span class="token punctuation">.</span><span class="token function">update_linux_resource</span><span class="token punctuation">(</span>
+        <span class="token operator">&amp;</span>config<span class="token punctuation">.</span>container_id<span class="token punctuation">,</span>
+        inner<span class="token punctuation">.</span>linux_resources<span class="token punctuation">.</span><span class="token function">as_ref</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token class-name">ResourceUpdateOp</span><span class="token punctuation">::</span><span class="token class-name">Add</span><span class="token punctuation">,</span>
+    <span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span><span class="token operator">?</span><span class="token punctuation">;</span>
+<span class="token keyword">if</span> <span class="token keyword">let</span> <span class="token class-name">Some</span><span class="token punctuation">(</span>linux<span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token operator">&amp;</span><span class="token keyword">mut</span> spec<span class="token punctuation">.</span><span class="token function">linux_mut</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+    linux<span class="token punctuation">.</span><span class="token function">set_resources</span><span class="token punctuation">(</span>resources<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+    <span class="token comment">// In certain scenarios, particularly under CoCo/Agent Policy enforcement,</span>
+    <span class="token comment">// the value of `Linux.Resources.Devices` should be empty.</span>
+    <span class="token keyword">if</span> <span class="token keyword">let</span> <span class="token class-name">Some</span><span class="token punctuation">(</span>resource<span class="token punctuation">)</span> <span class="token operator">=</span> linux<span class="token punctuation">.</span><span class="token function">resources_mut</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">&#123;</span>
+        resource<span class="token punctuation">.</span><span class="token function">set_devices</span><span class="token punctuation">(</span><span class="token class-name">None</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<ol start="4">
+<li>从用户配置的共享挂载列表中筛选出目标容器相关的挂载，并把它们注入到 OCI spec 中。对于使用 passfd io 模式的容器，提前创建 vsock 连接并把端口信息注入到 OCI spec 中。</li>
+</ol>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token keyword">let</span> container_name <span class="token operator">=</span> <span class="token namespace">k8s<span class="token punctuation">::</span></span><span class="token function">container_name</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>spec<span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">let</span> <span class="token keyword">mut</span> shared_mounts <span class="token operator">=</span> <span class="token class-name">Vec</span><span class="token punctuation">::</span><span class="token function">new</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token keyword">for</span> shared_mount <span class="token keyword">in</span> <span class="token operator">&amp;</span>toml_config<span class="token punctuation">.</span>runtime<span class="token punctuation">.</span>shared_mounts <span class="token punctuation">&#123;</span>
+    <span class="token keyword">if</span> shared_mount<span class="token punctuation">.</span>dst_ctr <span class="token operator">==</span> container_name <span class="token punctuation">&#123;</span>
+        <span class="token keyword">let</span> m <span class="token operator">=</span> <span class="token namespace">agent<span class="token punctuation">::</span>types<span class="token punctuation">::</span></span><span class="token class-name">SharedMount</span> <span class="token punctuation">&#123;</span>
+            name<span class="token punctuation">:</span> shared_mount<span class="token punctuation">.</span>name<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            src_ctr<span class="token punctuation">:</span> shared_mount<span class="token punctuation">.</span>src_ctr<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            src_path<span class="token punctuation">:</span> shared_mount<span class="token punctuation">.</span>src_path<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            dst_ctr<span class="token punctuation">:</span> shared_mount<span class="token punctuation">.</span>dst_ctr<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            dst_path<span class="token punctuation">:</span> shared_mount<span class="token punctuation">.</span>dst_path<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+        <span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+        shared_mounts<span class="token punctuation">.</span><span class="token function">push</span><span class="token punctuation">(</span>m<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">&#125;</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token comment">// In passfd io mode, we create vsock connections for io in advance</span>
+<span class="token comment">// and pass port info to agent in `CreateContainerRequest`.</span>
+<span class="token comment">// These vsock connections will be used as stdin/stdout/stderr of the container process.</span>
+<span class="token comment">// See agent/src/passfd_io.rs for more details.</span>
+<span class="token keyword">if</span> <span class="token keyword">let</span> <span class="token class-name">Some</span><span class="token punctuation">(</span><span class="token punctuation">(</span>hvsock_uds_path<span class="token punctuation">,</span> passfd_port<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">=</span> <span class="token operator">&amp;</span><span class="token keyword">self</span><span class="token punctuation">.</span>passfd_listener_addr <span class="token punctuation">&#123;</span>
+    inner
+        <span class="token punctuation">.</span>init_process
+        <span class="token punctuation">.</span><span class="token function">passfd_io_init</span><span class="token punctuation">(</span>hvsock_uds_path<span class="token punctuation">,</span> <span class="token operator">*</span>passfd_port<span class="token punctuation">)</span>
+        <span class="token punctuation">.</span><span class="token keyword">await</span><span class="token operator">?</span><span class="token punctuation">;</span>
+<span class="token punctuation">&#125;</span>
+
+<span class="token macro property">info!</span><span class="token punctuation">(</span>
+    <span class="token macro property">sl!</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+    <span class="token string">"OCI Spec &#123;:?&#125; within CreateContainerRequest."</span><span class="token punctuation">,</span>
+    spec<span class="token punctuation">.</span><span class="token function">clone</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">)</span><span class="token punctuation">;</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+
+<ol start="5">
+<li>创建 ContainerCreate 请求，调用 agent 的 create_container 方法在 VM 内创建容器。最后进行资源持久化。</li>
+</ol>
+<pre class="line-numbers language-rust" data-language="rust"><code class="language-rust"><span class="token comment">// create container</span>
+<span class="token keyword">let</span> r <span class="token operator">=</span> <span class="token namespace">agent<span class="token punctuation">::</span></span><span class="token class-name">CreateContainerRequest</span> <span class="token punctuation">&#123;</span>
+    process_id<span class="token punctuation">:</span> <span class="token namespace">agent<span class="token punctuation">::</span></span><span class="token class-name">ContainerProcessID</span><span class="token punctuation">::</span><span class="token function">new</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>config<span class="token punctuation">.</span>container_id<span class="token punctuation">,</span> <span class="token string">""</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+    storages<span class="token punctuation">,</span>
+    oci<span class="token punctuation">:</span> <span class="token class-name">Some</span><span class="token punctuation">(</span>spec<span class="token punctuation">)</span><span class="token punctuation">,</span>
+    sandbox_pidns<span class="token punctuation">,</span>
+    devices<span class="token punctuation">:</span> devices_agent<span class="token punctuation">,</span>
+    shared_mounts<span class="token punctuation">,</span>
+    stdin_port<span class="token punctuation">:</span> inner
+        <span class="token punctuation">.</span>init_process
+        <span class="token punctuation">.</span>passfd_io
+        <span class="token punctuation">.</span><span class="token function">as_ref</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token punctuation">.</span><span class="token function">and_then</span><span class="token punctuation">(</span><span class="token closure-params"><span class="token closure-punctuation punctuation">|</span>io<span class="token closure-punctuation punctuation">|</span></span> io<span class="token punctuation">.</span>stdin_port<span class="token punctuation">)</span><span class="token punctuation">,</span>
+    stdout_port<span class="token punctuation">:</span> inner
+        <span class="token punctuation">.</span>init_process
+        <span class="token punctuation">.</span>passfd_io
+        <span class="token punctuation">.</span><span class="token function">as_ref</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token punctuation">.</span><span class="token function">and_then</span><span class="token punctuation">(</span><span class="token closure-params"><span class="token closure-punctuation punctuation">|</span>io<span class="token closure-punctuation punctuation">|</span></span> io<span class="token punctuation">.</span>stdout_port<span class="token punctuation">)</span><span class="token punctuation">,</span>
+    stderr_port<span class="token punctuation">:</span> inner
+        <span class="token punctuation">.</span>init_process
+        <span class="token punctuation">.</span>passfd_io
+        <span class="token punctuation">.</span><span class="token function">as_ref</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token punctuation">.</span><span class="token function">and_then</span><span class="token punctuation">(</span><span class="token closure-params"><span class="token closure-punctuation punctuation">|</span>io<span class="token closure-punctuation punctuation">|</span></span> io<span class="token punctuation">.</span>stderr_port<span class="token punctuation">)</span><span class="token punctuation">,</span>
+    <span class="token punctuation">..</span><span class="token class-name">Default</span><span class="token punctuation">::</span><span class="token function">default</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">&#125;</span><span class="token punctuation">;</span>
+
+<span class="token keyword">self</span><span class="token punctuation">.</span>agent
+    <span class="token punctuation">.</span><span class="token function">create_container</span><span class="token punctuation">(</span>r<span class="token punctuation">)</span>
+    <span class="token punctuation">.</span><span class="token keyword">await</span>
+    <span class="token punctuation">.</span><span class="token function">context</span><span class="token punctuation">(</span><span class="token string">"agent create container"</span><span class="token punctuation">)</span><span class="token operator">?</span><span class="token punctuation">;</span>
+<span class="token keyword">self</span><span class="token punctuation">.</span>resource_manager<span class="token punctuation">.</span><span class="token function">dump</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token keyword">await</span><span class="token punctuation">;</span>
+<span class="token class-name">Ok</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://ihanzh.github.io">Han Zhang</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://ihanzh.github.io/2026/03/21/kata-class/">https://ihanzh.github.io/2026/03/21/kata-class/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://ihanzh.github.io" target="_blank">Han</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/kata/">kata</a><a class="post-meta__tags" href="/tags/sandbox/">sandbox</a><a class="post-meta__tags" href="/tags/container/">container</a><a class="post-meta__tags" href="/tags/Rust/">Rust</a></div><div class="post-share"><div class="social-share" data-image="/img/avatar.jpg" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2026/03/21/kata-runtime/" title="Kata runtime 启动流程"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">Kata runtime 启动流程</div></div><div class="info-2"><div class="info-item-1">Containerd 与 Runtime shim[ 编排调度层 ]                  Kubernetes                                    │ (CRI 协议) [ 高级管理层 ]          containerd  /  CRI-O  /  Docker  /  Podman                                    │ (OCI 协议)              ┌─────────────────────┼─────────────────────┐ [ 运行时层 ] │ 标准共享型          │ 微虚机隔离型        │ 用户态沙箱型              │ runc / crun         │ Kata Containers     │ gVisor              └──────┬──────────────┴──────┬──────────────┴──────┬──────┘ [ 隔离引擎层 ]      │               ...</div></div></div></a><a class="pagination-related" href="/2026/03/18/qemu-vcpu-start/" title="QEMU vCPU 线程启动全流程"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">QEMU vCPU 线程启动全流程</div></div><div class="info-2"><div class="info-item-1"> 这篇文章从 QEMU 启动开始，沿着机器（Machine）&#x2F;设备（Device）模型，一路追踪到 vCPU 线程的创建与 KVM 运行过程。    1. 从 main() 到 Machine 创建：QEMU 的大致启动流程QEMU 采用 QOM（QEMU Object Model）构建设备树，启动时首先会创建一个 MachineState，然后在 Machine 初始化阶段创建各种设备（如 CPU、PCI 总线、内存控制器等）。 关键流程：  先通过 kvm_fd 创建 VM，获得 vmfd:  main() -&gt; qemu_init() -&gt; configure_accelerators() -&gt; accel_init_machine() -&gt; acc-&gt;init_machine() -&gt; kvm_init() -&gt; do_kvm_create_vm() -&gt; kvm_ioctl(s, KVM_CREATE_VM, type)  创建 Machine: main() -&gt; qemu_init() -&gt; qm...</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/03/21/kata-runtime/" title="Kata runtime 启动流程"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-03-21</div><div class="info-item-2">Kata runtime 启动流程</div></div><div class="info-2"><div class="info-item-1">Containerd 与 Runtime shim[ 编排调度层 ]                  Kubernetes                                    │ (CRI 协议) [ 高级管理层 ]          containerd  /  CRI-O  /  Docker  /  Podman                                    │ (OCI 协议)              ┌─────────────────────┼─────────────────────┐ [ 运行时层 ] │ 标准共享型          │ 微虚机隔离型        │ 用户态沙箱型              │ runc / crun         │ Kata Containers     │ gVisor              └──────┬──────────────┴──────┬──────────────┴──────┬──────┘ [ 隔离引擎层 ]      │               ...</div></div></div></a></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.jpg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Han Zhang</div><div class="author-info-description">内核与虚拟化技术</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">7</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">13</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">3</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/ihanzh"><i class="fab fa-github"></i><span>Follow Me</span></a></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#1-ServiceManager"><span class="toc-number">1.</span> <span class="toc-text">1. ServiceManager</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-SandboxService-%E5%92%8C-TaskService"><span class="toc-number">2.</span> <span class="toc-text">2. SandboxService 和 TaskService</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-RuntimeHandlerManager"><span class="toc-number">3.</span> <span class="toc-text">3. RuntimeHandlerManager</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-Sandbox-trait"><span class="toc-number">4.</span> <span class="toc-text">4. Sandbox trait</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-ContainerManager-trait-Container"><span class="toc-number">5.</span> <span class="toc-text">5. ContainerManager trait, Container</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/03/21/kata-class/" title="Kata runtime 关键组件分析">Kata runtime 关键组件分析</a><time datetime="2026-03-20T16:00:00.000Z" title="发表于 2026-03-21 00:00:00">2026-03-21</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/03/21/kata-runtime/" title="Kata runtime 启动流程">Kata runtime 启动流程</a><time datetime="2026-03-20T16:00:00.000Z" title="发表于 2026-03-21 00:00:00">2026-03-21</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/03/18/qemu-vcpu-start/" title="QEMU vCPU 线程启动全流程">QEMU vCPU 线程启动全流程</a><time datetime="2026-03-18T04:00:00.000Z" title="发表于 2026-03-18 12:00:00">2026-03-18</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/03/18/kvm/" title="KVM：通过匿名 inode 实现 VM fd 的文件操作">KVM：通过匿名 inode 实现 VM fd 的文件操作</a><time datetime="2026-03-17T16:00:00.000Z" title="发表于 2026-03-18 00:00:00">2026-03-18</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/03/16/dma/" title="DMA 原理和工作流程">DMA 原理和工作流程</a><time datetime="2026-03-16T08:00:00.000Z" title="发表于 2026-03-16 16:00:00">2026-03-16</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By Han Zhang</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.1</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.4</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.4"></script><script src="/js/main.js?v=5.5.4"></script><div class="js-pjax"></div><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>
