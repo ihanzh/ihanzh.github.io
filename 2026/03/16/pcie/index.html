@@ -1,0 +1,262 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>PCIe 原理和资源访问 | Han</title><meta name="author" content="Han Zhang"><meta name="copyright" content="Han Zhang"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="本文是对 PCIe 原理和资源访问 视频内容的整理和总结。 一、 PCIe 基本原理与通信机制PCIe 的设计与早期的 PCI 总线有着本质的区别。   拓扑结构差异：传统的 PCI 采用的是总线拓扑，设备之间需要进行总线仲裁，并且共享带宽 。而 PCIe 采用的是树形拓扑，实现了端到端的通信，每个设备都能独享链路带宽 。  物理层通信：PCIe 的两个端点通过双 Link 进行全双工传输 。其中">
+<meta property="og:type" content="article">
+<meta property="og:title" content="PCIe 原理和资源访问">
+<meta property="og:url" content="https://ihanzh.github.io/2026/03/16/pcie/index.html">
+<meta property="og:site_name" content="Han">
+<meta property="og:description" content="本文是对 PCIe 原理和资源访问 视频内容的整理和总结。 一、 PCIe 基本原理与通信机制PCIe 的设计与早期的 PCI 总线有着本质的区别。   拓扑结构差异：传统的 PCI 采用的是总线拓扑，设备之间需要进行总线仲裁，并且共享带宽 。而 PCIe 采用的是树形拓扑，实现了端到端的通信，每个设备都能独享链路带宽 。  物理层通信：PCIe 的两个端点通过双 Link 进行全双工传输 。其中">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://ihanzh.github.io/img/avatar.jpg">
+<meta property="article:published_time" content="2026-03-15T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-04-15T07:33:40.517Z">
+<meta property="article:author" content="Han Zhang">
+<meta property="article:tag" content="PCIe">
+<meta property="article:tag" content="计算机体系结构">
+<meta property="article:tag" content="设备驱动">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://ihanzh.github.io/img/avatar.jpg"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "PCIe 原理和资源访问",
+  "url": "https://ihanzh.github.io/2026/03/16/pcie/",
+  "image": "https://ihanzh.github.io/img/avatar.jpg",
+  "datePublished": "2026-03-15T16:00:00.000Z",
+  "dateModified": "2026-04-15T07:33:40.517Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "Han Zhang",
+      "url": "https://ihanzh.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon.png"><link rel="canonical" href="https://ihanzh.github.io/2026/03/16/pcie/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.5.4"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.1.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"prismjs","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'PCIe 原理和资源访问',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><meta name="generator" content="Hexo 8.1.1"></head><body><div class="bg-animation" id="web_bg" style="background-image: url(/img/background.jpg);"></div><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.jpg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">11</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">18</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">4</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><span> Tags</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><span> Categories</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/top.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Han</span></a><a class="nav-page-title" href="/"><span class="site-name">PCIe 原理和资源访问</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><span> Tags</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><span> Categories</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">PCIe 原理和资源访问</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-03-15T16:00:00.000Z" title="发表于 2026-03-16 00:00:00">2026-03-16</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-04-15T07:33:40.517Z" title="更新于 2026-04-15 15:33:40">2026-04-15</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/device/">device</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><p>本文是对 <a target="_blank" rel="noopener" href="https://www.bilibili.com/video/BV1tc411M7Jv/?spm_id_from=333.1007.top_right_bar_window_history.content.click&vd_source=fbeb8b3a1b9376fdde335870501bd577">PCIe 原理和资源访问</a> 视频内容的整理和总结。</p>
+<h2 id="一、-PCIe-基本原理与通信机制"><a href="#一、-PCIe-基本原理与通信机制" class="headerlink" title="一、 PCIe 基本原理与通信机制"></a>一、 PCIe 基本原理与通信机制</h2><p>PCIe 的设计与早期的 PCI 总线有着本质的区别。</p>
+<p><img src="/images/pcie/1773644532613.png" alt="alt text"></p>
+<ul>
+<li><p><strong>拓扑结构差异</strong>：传统的 PCI 采用的是<strong>总线拓扑</strong>，设备之间需要进行总线仲裁，并且共享带宽 。而 PCIe 采用的是<strong>树形拓扑</strong>，实现了端到端的通信，每个设备都能独享链路带宽 。</p>
+</li>
+<li><p><strong>物理层通信</strong>：PCIe 的两个端点通过双 Link 进行全双工传输 。其中一个 Link 负责发送（Tx），另一个负责接收（Rx），这两个 Link 共同组成了一个 Lane（通道） 。</p>
+</li>
+<li><p><strong>灵活的带宽配置</strong>：一条 PCIe 传输链路可以由多个 Lane 组成，系统支持 1、2、4、8、16 甚至 32 个 Lane，以此来灵活匹配不同设备对带宽的需求 。</p>
+</li>
+</ul>
+<h2 id="二、-PCIe-核心组件架构"><a href="#二、-PCIe-核心组件架构" class="headerlink" title="二、 PCIe 核心组件架构"></a>二、 PCIe 核心组件架构</h2><p>在 PCIe 的树形拓扑中，有三个核心组件构成了整个网络 ：</p>
+<ol>
+<li><p><strong>Root Complex (RC)</strong>：这是连接 CPU、内存与 PCIe 树的“根节点”，它不仅负责 CPU&#x2F;内存与 PCIe 设备之间的数据传输，还处理设备间的 P2P 通信，并实现 IOMMU 功能 。</p>
+</li>
+<li><p><strong>Bridge &#x2F; Switch</strong>：桥接设备。它包含了内置在 RC 中的 Root Port、上游端口（Upstream Port）和下游端口（Downstream Port） 。Switch 能够极大地扩展 PCIe 接口的数量。</p>
+</li>
+</ol>
+<p><img src="/images/pcie/1776231498377.png" alt="alt text"></p>
+<ol start="3">
+<li><strong>Endpoint (EP)</strong>：端点设备，也就是我们实际插在主板上的 PCIe 卡（如显卡、网卡等）。</li>
+</ol>
+<pre><code>* PCIe Endpoint：访问地址空间&gt;=4G memory，支持32bit和64 bit；无法产生I/O请求。
+* Legacy Endpoint：访问地址空间&lt;4G memory，支持32bit；可以产生I/O请求。
+* Root Complex Integrated Endpoint：直接集成到Root Complex的设备，不需要通过Root Port连接。比如CPU的集成显卡。
+</code></pre>
+<blockquote>
+<p><strong>💡 实用技巧</strong>：在 Linux 系统中，我们可以通过 <code>lspci</code> 命令来查看 PCIe 的拓扑结构和设备详细配置（例如 <code>lspci -tv</code> 查看树形结构，<code>lspci -vvv</code> 查看详细信息） 。</p>
+</blockquote>
+<h2 id="三、-数据传输的灵魂：TLP-Transaction-Layer-Packet"><a href="#三、-数据传输的灵魂：TLP-Transaction-Layer-Packet" class="headerlink" title="三、 数据传输的灵魂：TLP (Transaction Layer Packet)"></a>三、 数据传输的灵魂：TLP (Transaction Layer Packet)</h2><p>PCIe 的硬件数据传输在逻辑上分为三层：事务层、数据链路层和物理层 。其中，对软件开发者最重要的一层是事务层。</p>
+<p><img src="/images/pcie/1773644806015.png" alt="alt text"></p>
+<ul>
+<li><p>事务层通过 <strong>TLP（事务层数据包）</strong> 来实现数据的路由和寻址，这就好比 TCP&#x2F;IP 网络中的 IP 数据包 。</p>
+</li>
+<li><p>TLP 的请求类型主要分为四种：<strong>Memory（内存读写）、I&#x2F;O（IO 读写）、Configuration（配置空间读写）和 Message（消息机制）</strong> 。</p>
+</li>
+<li><p><strong>路由方式</strong>：为了将 TLP 准确送达目标设备，中间的桥设备会根据三种路由规则进行转发：<strong>Address Routing</strong>（基于地址，用于 Memory&#x2F;IO）、<strong>ID Routing</strong>（基于 BDF 标识，用于配置空间读写）以及 <strong>Implicit Routing</strong>（隐含路由，用于消息） 。</p>
+</li>
+</ul>
+<p><img src="/images/pcie/1776232393980.png" alt="alt text"></p>
+<p>Address Routing 设备会判断地址是否落在自己的 Bar 范围内，如果是就处理请求，桥设备也有自己的路由表，记录了下游设备的地址范围，来决定是否转发 TLP 。</p>
+<p>同样，ID Routing 设备会根据 TLP 中的 BDF 标识来判断是否处理请求或转发 。桥设备的路由表中会记录下游设备的 Bus 号范围，来决定是否转发 TLP 。</p>
+<h2 id="四、-PCIe-资源分配与访问"><a href="#四、-PCIe-资源分配与访问" class="headerlink" title="四、 PCIe 资源分配与访问"></a>四、 PCIe 资源分配与访问</h2><p>系统启动时，BIOS 或操作系统会枚举所有 PCIe 设备，并为它们分配必需的系统资源 。</p>
+<h3 id="1-BDF-标识号"><a href="#1-BDF-标识号" class="headerlink" title="1. BDF 标识号"></a>1. BDF 标识号</h3><p>每个 PCIe 设备在系统中都有一个唯一的“身份证”—— <strong>BDF (Bus:Device.Function)</strong> 。</p>
+<ul>
+<li><strong>Bus</strong>：8 位，最多支持 256 条总线 。</li>
+</ul>
+<p>bus 号由桥设备分配，根桥（Root Port）分配给下游设备的 bus 号范围通常是连续的 。</p>
+<ul>
+<li><p><strong>Device</strong>：5 位，每个 bus 最多连接 32 个设备 。</p>
+</li>
+<li><p><strong>Function</strong>：3 位，每个物理设备最多可包含 8 个独立的功能接口（当设备为多功能设备时，此值非 0） 。</p>
+</li>
+</ul>
+<p>BDF 实际不存在于硬件和配置空间中，而是由系统软件在枚举过程中动态分配的逻辑标识符，用于软件层面识别和访问设备 。</p>
+<h3 id="2-Configuration-Space-配置空间"><a href="#2-Configuration-Space-配置空间" class="headerlink" title="2. Configuration Space (配置空间)"></a>2. Configuration Space (配置空间)</h3><p>配置空间是软件与设备交互的控制面板。每个设备的 Function 都有一个独立的配置空间，包含了设备的基本信息、状态寄存器以及资源需求等 。</p>
+<p>配置空间包括</p>
+<ul>
+<li>头部：64 字节</li>
+</ul>
+<p><img src="/images/pcie/1773646893778.png" alt="alt text"></p>
+<ul>
+<li>Capabilities（可选）：192字节，一组拓展寄存器，每个功能接口可以有一个链表结构的能力列表，记录了设备支持的扩展功能（如 MSI、MSI-X、Power Management 等） 。</li>
+</ul>
+<p><img src="/images/pcie/1776234997116.png" alt="alt text"></p>
+<ul>
+<li>PCIe 拓展空间：4096-256字节</li>
+</ul>
+<ul>
+<li><p>PCI 时代配置空间只有 256 字节，而在 PCIe 中被扩展到了 4KB 。</p>
+</li>
+<li><p>访问方式有传统的 <strong>IO 端口访问</strong>（0xCF8 和 0xCFC）以及更现代的 <strong>MMIO（内存映射 IO）</strong> 方式 。</p>
+</li>
+<li><p>端点设备使用的是 <strong>Type 0</strong> 头结构，而桥设备使用的是 <strong>Type 1</strong> 头结构 。</p>
+</li>
+</ul>
+<h3 id="3-BAR-Base-Address-Register"><a href="#3-BAR-Base-Address-Register" class="headerlink" title="3. BAR (Base Address Register)"></a>3. BAR (Base Address Register)</h3><p>BAR 是极为关键的寄存器。设备的内部 RAM 或寄存器要想被 CPU（Host）直接读写，必须被统一映射到 Host 的物理地址空间中 。</p>
+<ul>
+<li><p>系统软件通过读取 BAR 来了解设备需要多大的地址空间，并为其分配物理基地址 。然后将基地址写入 BAR 寄存器中，Host 就可以通过基地址加上偏移量的方式来访问设备内存了 。</p>
+</li>
+<li><p>在 Linux 中，内核需要通过 <code>ioremap</code> 将这些物理地址映射到虚拟地址空间后才能安全访问 。</p>
+</li>
+<li><p>应用程序需要通过 mmap 设备的 resource 文件，映射到用户空间后才能访问设备资源 。</p>
+</li>
+</ul>
+<h2 id="五、-DMA-与中断机制"><a href="#五、-DMA-与中断机制" class="headerlink" title="五、 DMA 与中断机制"></a>五、 DMA 与中断机制</h2><ul>
+<li><p><strong>DMA (Direct Memory Access)</strong>：这允许设备内部的 DMA 控制器主动发送 Memory Write TLP，将数据直接搬运到系统内存，全程无需 CPU 干预，极大地释放了 CPU 算力 。</p>
+</li>
+<li><p><strong>中断机制</strong>：当设备需要通知 CPU 时，会触发中断。PCIe 必须支持现代的 <strong>MSI (Message Signaled Interrupt)</strong> 或 <strong>MSI-X</strong> 中断 。</p>
+</li>
+<li><p>它们本质上是设备向特定地址（如 0xFEE00000）发送的一个带数据的 Memory Write TLP 。</p>
+</li>
+<li><p>MSI 最多支持 32 个中断向量，而 MSI-X 则通过内存中的 Table 结构，支持多达 2048 个中断，并允许中断向量非连续分配 。</p>
+</li>
+</ul>
+<h2 id="参考资料："><a href="#参考资料：" class="headerlink" title="参考资料："></a>参考资料：</h2><ul>
+<li><a href="/resource/pcie-1-intro-resource.pdf">视频 ppt</a></li>
+</ul>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://ihanzh.github.io">Han Zhang</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://ihanzh.github.io/2026/03/16/pcie/">https://ihanzh.github.io/2026/03/16/pcie/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://ihanzh.github.io" target="_blank">Han</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E8%AE%A1%E7%AE%97%E6%9C%BA%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84/">计算机体系结构</a><a class="post-meta__tags" href="/tags/PCIe/">PCIe</a><a class="post-meta__tags" href="/tags/%E8%AE%BE%E5%A4%87%E9%A9%B1%E5%8A%A8/">设备驱动</a></div><div class="post-share"><div class="social-share" data-image="/img/avatar.jpg" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2026/03/16/dma/" title="DMA 原理和工作流程"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">DMA 原理和工作流程</div></div><div class="info-2"><div class="info-item-1">在计算机系统中，数据搬运是一项极其频繁且繁重的任务。如果每一次硬盘读取、网卡收发都要 CPU 亲自去一字节一字节地搬运，哪怕 CPU 算力再强，也会被这些“体力活”彻底拖垮。 为了解放 CPU，DMA（Direct Memory Access，直接内存访问） 技术应运而生。   一、 核心概念：什么是 DMA 与 DMA Buffer？1. DMA（直接内存访问）本质上，DMA 是一种硬件级的数据旁路机制。它的核心是一个名叫 DMAC（DMA控制器） 的硬件（现在通常集成在主板芯片组或外设内部，如 PCIe 设备的 Bus Master）。 简单来说，它的工作就是：“把数据搬运这种繁重的体力活从 CPU 手里接管过来，让 CPU 去干更有价值的计算工作。”在使用 DMA 的场景下，CPU 只需要在开头交代一下任务（源地址、目的地址、传输大小），在结尾接收一下中断（验收成果），中间的数据流转完全由 DMA 硬件独立完成。 2. DMA Buffer（DMA 缓冲区）从内存（Memory）的视角来看，DMA Buffer 是操作系统在系统主存（RAM）中特意开辟出来的一块特殊区域。可...</div></div></div></a><a class="pagination-related" href="/2026/03/12/rust/" title=""><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2"></div></div><div class="info-2"><div class="info-item-1">这句话触及了 Rust 高级编程（特别是开发底层库时）非常核心的一个概念：型变（Variance）。 这句话的通俗翻译是：  “首先，（如果我们用刚才那种简单的写法），编译器会赋予这个结构体过于严格的型变规则（Invariance，不变性）。这会导致：本来一个函数需要一个生命周期较短的 Arc&lt;&amp;&#39;a str&gt;，我们传给它一个生命周期无限长的 Arc&lt;&amp;&#39;static str&gt; 时，编译器会报错说类型不匹配。”  要听懂这句话，我们需要拆解三个概念：生命周期子类型、型变规则，以及为什么那个简单的 Arc 写法会触发这个问题。  1. 常识：长的生命周期应该能兼容短的在正常的 Rust 代码中，生命周期较长的数据，是可以当作生命周期较短的数据来使用的。  &#39;static 意味着“活得和程序一样长”。 &#39;a 意味着“活某一段特定的时间”。 显然，&#39;static 包含了 &#39;a。  就像你拿着 100 块钱（&#39;static），去买 10 块钱的东西（&#39;a），老板当然应该接受。 fn p...</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/03/16/dma/" title="DMA 原理和工作流程"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-03-16</div><div class="info-item-2">DMA 原理和工作流程</div></div><div class="info-2"><div class="info-item-1">在计算机系统中，数据搬运是一项极其频繁且繁重的任务。如果每一次硬盘读取、网卡收发都要 CPU 亲自去一字节一字节地搬运，哪怕 CPU 算力再强，也会被这些“体力活”彻底拖垮。 为了解放 CPU，DMA（Direct Memory Access，直接内存访问） 技术应运而生。   一、 核心概念：什么是 DMA 与 DMA Buffer？1. DMA（直接内存访问）本质上，DMA 是一种硬件级的数据旁路机制。它的核心是一个名叫 DMAC（DMA控制器） 的硬件（现在通常集成在主板芯片组或外设内部，如 PCIe 设备的 Bus Master）。 简单来说，它的工作就是：“把数据搬运这种繁重的体力活从 CPU 手里接管过来，让 CPU 去干更有价值的计算工作。”在使用 DMA 的场景下，CPU 只需要在开头交代一下任务（源地址、目的地址、传输大小），在结尾接收一下中断（验收成果），中间的数据流转完全由 DMA 硬件独立完成。 2. DMA Buffer（DMA 缓冲区）从内存（Memory）的视角来看，DMA Buffer 是操作系统在系统主存（RAM）中特意开辟出来的一块特殊区域。可...</div></div></div></a></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.jpg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Han Zhang</div><div class="author-info-description">内核与虚拟化技术</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">11</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">18</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">4</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/ihanzh"><i class="fab fa-github"></i><span>Follow Me</span></a></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%80%E3%80%81-PCIe-%E5%9F%BA%E6%9C%AC%E5%8E%9F%E7%90%86%E4%B8%8E%E9%80%9A%E4%BF%A1%E6%9C%BA%E5%88%B6"><span class="toc-number">1.</span> <span class="toc-text">一、 PCIe 基本原理与通信机制</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%8C%E3%80%81-PCIe-%E6%A0%B8%E5%BF%83%E7%BB%84%E4%BB%B6%E6%9E%B6%E6%9E%84"><span class="toc-number">2.</span> <span class="toc-text">二、 PCIe 核心组件架构</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%89%E3%80%81-%E6%95%B0%E6%8D%AE%E4%BC%A0%E8%BE%93%E7%9A%84%E7%81%B5%E9%AD%82%EF%BC%9ATLP-Transaction-Layer-Packet"><span class="toc-number">3.</span> <span class="toc-text">三、 数据传输的灵魂：TLP (Transaction Layer Packet)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%9B%9B%E3%80%81-PCIe-%E8%B5%84%E6%BA%90%E5%88%86%E9%85%8D%E4%B8%8E%E8%AE%BF%E9%97%AE"><span class="toc-number">4.</span> <span class="toc-text">四、 PCIe 资源分配与访问</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#1-BDF-%E6%A0%87%E8%AF%86%E5%8F%B7"><span class="toc-number">4.1.</span> <span class="toc-text">1. BDF 标识号</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-Configuration-Space-%E9%85%8D%E7%BD%AE%E7%A9%BA%E9%97%B4"><span class="toc-number">4.2.</span> <span class="toc-text">2. Configuration Space (配置空间)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-BAR-Base-Address-Register"><span class="toc-number">4.3.</span> <span class="toc-text">3. BAR (Base Address Register)</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%94%E3%80%81-DMA-%E4%B8%8E%E4%B8%AD%E6%96%AD%E6%9C%BA%E5%88%B6"><span class="toc-number">5.</span> <span class="toc-text">五、 DMA 与中断机制</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%8F%82%E8%80%83%E8%B5%84%E6%96%99%EF%BC%9A"><span class="toc-number">6.</span> <span class="toc-text">参考资料：</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/04/15/vfio/" title="VFIO：userspace 设备直通与虚拟机访问">VFIO：userspace 设备直通与虚拟机访问</a><time datetime="2026-04-14T16:00:00.000Z" title="发表于 2026-04-15 00:00:00">2026-04-15</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/04/13/gpgpu/" title="无标题">无标题</a><time datetime="2026-04-13T10:04:02.442Z" title="发表于 2026-04-13 18:04:02">2026-04-13</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/04/01/vring/" title="VRing 数据结构">VRing 数据结构</a><time datetime="2026-04-01T11:00:00.000Z" title="发表于 2026-04-01 19:00:00">2026-04-01</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/03/21/kata-class/" title="Kata runtime 关键组件分析">Kata runtime 关键组件分析</a><time datetime="2026-03-20T16:00:00.000Z" title="发表于 2026-03-21 00:00:00">2026-03-21</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/03/21/kata-runtime/" title="Kata runtime 启动流程">Kata runtime 启动流程</a><time datetime="2026-03-20T16:00:00.000Z" title="发表于 2026-03-21 00:00:00">2026-03-21</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By Han Zhang</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.1</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.4</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.4"></script><script src="/js/main.js?v=5.5.4"></script><div class="js-pjax"></div><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>
