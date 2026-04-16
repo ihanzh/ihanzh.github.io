@@ -163,55 +163,76 @@
 }</script><meta name="generator" content="Hexo 8.1.1"></head><body><div class="bg-animation" id="web_bg" style="background-image: url(/img/background.jpg);"></div><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.jpg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">10</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">18</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">4</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><span> Tags</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><span> Categories</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/top.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Han</span></a><a class="nav-page-title" href="/"><span class="site-name">DMA 原理和工作流程</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><span> Tags</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><span> Categories</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">DMA 原理和工作流程</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-03-16T08:00:00.000Z" title="发表于 2026-03-16 16:00:00">2026-03-16</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-03-16T12:21:49.094Z" title="更新于 2026-03-16 20:21:49">2026-03-16</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/device/">device</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><p>在计算机系统中，数据搬运是一项极其频繁且繁重的任务。如果每一次硬盘读取、网卡收发都要 CPU 亲自去一字节一字节地搬运，哪怕 CPU 算力再强，也会被这些“体力活”彻底拖垮。</p>
 <p>为了解放 CPU，<strong>DMA（Direct Memory Access，直接内存访问）</strong> 技术应运而生。</p>
 <span id="more"></span>
-
-<h2 id="一、-核心概念：什么是-DMA-与-DMA-Buffer？"><a href="#一、-核心概念：什么是-DMA-与-DMA-Buffer？" class="headerlink" title="一、 核心概念：什么是 DMA 与 DMA Buffer？"></a>一、 核心概念：什么是 DMA 与 DMA Buffer？</h2><h3 id="1-DMA（直接内存访问）"><a href="#1-DMA（直接内存访问）" class="headerlink" title="1. DMA（直接内存访问）"></a>1. DMA（直接内存访问）</h3><p>本质上，DMA 是一种<strong>硬件级的数据旁路机制</strong>。它的核心是一个名叫 <strong>DMAC（DMA控制器）</strong> 的硬件（现在通常集成在主板芯片组或外设内部，如 PCIe 设备的 Bus Master）。</p>
-<p>简单来说，它的工作就是：“把数据搬运这种繁重的体力活从 CPU 手里接管过来，让 CPU 去干更有价值的计算工作。”<br>在使用 DMA 的场景下，CPU 只需要在开头交代一下任务（源地址、目的地址、传输大小），在结尾接收一下中断（验收成果），中间的数据流转完全由 DMA 硬件独立完成。</p>
-<h3 id="2-DMA-Buffer（DMA-缓冲区）"><a href="#2-DMA-Buffer（DMA-缓冲区）" class="headerlink" title="2. DMA Buffer（DMA 缓冲区）"></a>2. DMA Buffer（DMA 缓冲区）</h3><p>从内存（Memory）的视角来看，DMA Buffer 是操作系统在系统主存（RAM）中特意开辟出来的一块特殊区域。可以理解为 CPU 和 外设（Device）之间交接货物的<strong>专属 VIP 卸货平台</strong>。</p>
+<h2 id="一、-核心概念：什么是-DMA-与-DMA-Buffer？">一、 核心概念：什么是 DMA 与 DMA Buffer？</h2>
+<h3 id="1-DMA（直接内存访问）">1. DMA（直接内存访问）</h3>
+<p>本质上，DMA 是一种<strong>硬件级的数据旁路机制</strong>。它的核心是一个名叫 <strong>DMAC（DMA控制器）</strong> 的硬件（现在通常集成在主板芯片组或外设内部，如 PCIe 设备的 Bus Master）。</p>
+<p>简单来说，它的工作就是：“把数据搬运这种繁重的体力活从 CPU 手里接管过来，让 CPU 去干更有价值的计算工作。”<br>
+在使用 DMA 的场景下，CPU 只需要在开头交代一下任务（源地址、目的地址、传输大小），在结尾接收一下中断（验收成果），中间的数据流转完全由 DMA 硬件独立完成。</p>
+<h3 id="2-DMA-Buffer（DMA-缓冲区）">2. DMA Buffer（DMA 缓冲区）</h3>
+<p>从内存（Memory）的视角来看，DMA Buffer 是操作系统在系统主存（RAM）中特意开辟出来的一块特殊区域。可以理解为 CPU 和 外设（Device）之间交接货物的<strong>专属 VIP 卸货平台</strong>。</p>
 <p>当设备需要写数据（比如网卡收到网络包），设备的 DMA 引擎就会把数据从设备内部拷贝到内存的这块 DMA Buffer 中；反之，当设备要读数据（比如网卡发包），它就会从 DMA Buffer 中把数据吸走。</p>
 <hr>
-<h2 id="二、-特别注意点（深入底层的-3-个大坑）"><a href="#二、-特别注意点（深入底层的-3-个大坑）" class="headerlink" title="二、 特别注意点（深入底层的 3 个大坑）"></a>二、 特别注意点（深入底层的 3 个大坑）</h2><p>理解 DMA，绝不能只停留在“搬运工”的比喻上，必须跨过以下三个底层门槛：</p>
-<h3 id="⚠️-1-Cache-一致性（Cache-Coherence）问题-——-最容易翻车的地方"><a href="#⚠️-1-Cache-一致性（Cache-Coherence）问题-——-最容易翻车的地方" class="headerlink" title="⚠️ 1. Cache 一致性（Cache Coherence）问题 —— 最容易翻车的地方"></a>⚠️ 1. Cache 一致性（Cache Coherence）问题 —— 最容易翻车的地方</h3><p>现代 CPU 和主存之间隔着 L1&#x2F;L2&#x2F;L3 缓存，CPU 读写数据通常是在操作 Cache。这就导致了 CPU 看到的数据和 DMA（直接连着主存）看到的数据可能<strong>不一致</strong>！</p>
+<h2 id="二、-特别注意点（深入底层的-3-个大坑）">二、 特别注意点（深入底层的 3 个大坑）</h2>
+<p>理解 DMA，绝不能只停留在“搬运工”的比喻上，必须跨过以下三个底层门槛：</p>
+<h3 id="⚠️-1-Cache-一致性（Cache-Coherence）问题-——-最容易翻车的地方">⚠️ 1. Cache 一致性（Cache Coherence）问题 —— 最容易翻车的地方</h3>
+<p>现代 CPU 和主存之间隔着 L1/L2/L3 缓存，CPU 读写数据通常是在操作 Cache。这就导致了 CPU 看到的数据和 DMA（直接连着主存）看到的数据可能<strong>不一致</strong>！</p>
 <ul>
-<li><strong>CPU 发数据给外设时</strong>：CPU 刚把数据写到内存地址 X，但实际上数据可能还暂存在 CPU Cache 里。此时如果 DMA 去主存取数据，取到的将是老旧的错误数据。<ul>
+<li><strong>CPU 发数据给外设时</strong>：CPU 刚把数据写到内存地址 X，但实际上数据可能还暂存在 CPU Cache 里。此时如果 DMA 去主存取数据，取到的将是老旧的错误数据。
+<ul>
 <li><strong>解决</strong>：启动 DMA 前，CPU 必须执行 <strong>Flush（刷出）</strong>，强制把 Cache 写回主存。</li>
 </ul>
 </li>
-<li><strong>外设发数据给 CPU 时</strong>：外设通过 DMA 偷偷把新数据写到了主存的地址 Y。但 CPU 的 Cache 里如果还有地址 Y 的历史遗留数据，CPU 就会直接读 Cache 而无视主存的新数据。<ul>
+<li><strong>外设发数据给 CPU 时</strong>：外设通过 DMA 偷偷把新数据写到了主存的地址 Y。但 CPU 的 Cache 里如果还有地址 Y 的历史遗留数据，CPU 就会直接读 Cache 而无视主存的新数据。
+<ul>
 <li><strong>解决</strong>：CPU 读取前，必须执行 <strong>Invalidate（失效）</strong>，强制废弃当前 Cache，去主存重新拉取。</li>
 </ul>
 </li>
 </ul>
-<h3 id="⚠️-2-物理地址与虚拟地址的鸿沟"><a href="#⚠️-2-物理地址与虚拟地址的鸿沟" class="headerlink" title="⚠️ 2. 物理地址与虚拟地址的鸿沟"></a>⚠️ 2. 物理地址与虚拟地址的鸿沟</h3><p>传统的 DMA 硬件非常“死板”，它<strong>只认物理地址</strong>，根本不知道什么是虚拟内存、什么是页表。如果内核随便给它一个虚拟地址，它可能会直接把数据写坏别人的物理内存空间。</p>
+<h3 id="⚠️-2-物理地址与虚拟地址的鸿沟">⚠️ 2. 物理地址与虚拟地址的鸿沟</h3>
+<p>传统的 DMA 硬件非常“死板”，它<strong>只认物理地址</strong>，根本不知道什么是虚拟内存、什么是页表。如果内核随便给它一个虚拟地址，它可能会直接把数据写坏别人的物理内存空间。</p>
 <ul>
 <li><strong>解决 1（连续物理内存）</strong>：早期操作系统分配 DMA Buffer 时，必须保证这块内存在<strong>物理上是绝对连续的</strong>（例如 Linux 的 CMA 机制）。</li>
 <li><strong>解决 2（Scatter-Gather DMA）</strong>：外设支持读取包含多个非连续物理页地址的“描述符链表”，将数据打散存储。</li>
 <li><strong>解决 3（IOMMU）</strong>：现代主板引入了 IOMMU 硬件，相当于给 DMA 专门配了一个“虚拟地址翻译官”，设备可以直接使用 IO 虚拟地址（IOVA）进行安全传输。</li>
 </ul>
-<h3 id="⚠️-3-内存必须被“锁定（Pinned）”"><a href="#⚠️-3-内存必须被“锁定（Pinned）”" class="headerlink" title="⚠️ 3. 内存必须被“锁定（Pinned）”"></a>⚠️ 3. 内存必须被“锁定（Pinned）”</h3><p>普通程序的物理内存如果不用，可能被操作系统偷偷换出（Swap）到硬盘上。<strong>但 DMA Buffer 绝对不行！</strong><br>一旦 DMA Buffer 被换出，原来的物理地址分配给了其他进程，而外设毫不知情还在往那个物理地址写数据，就会导致灾难性的内存覆盖（甚至内核崩溃）。因此，DMA Buffer 所在的物理页必须被死死锁定在内存中。</p>
+<h3 id="⚠️-3-内存必须被“锁定（Pinned）”">⚠️ 3. 内存必须被“锁定（Pinned）”</h3>
+<p>普通程序的物理内存如果不用，可能被操作系统偷偷换出（Swap）到硬盘上。<strong>但 DMA Buffer 绝对不行！</strong><br>
+一旦 DMA Buffer 被换出，原来的物理地址分配给了其他进程，而外设毫不知情还在往那个物理地址写数据，就会导致灾难性的内存覆盖（甚至内核崩溃）。因此，DMA Buffer 所在的物理页必须被死死锁定在内存中。</p>
 <hr>
-<h2 id="三、-工作流程深度拆解（以网卡接收数据为例）"><a href="#三、-工作流程深度拆解（以网卡接收数据为例）" class="headerlink" title="三、 工作流程深度拆解（以网卡接收数据为例）"></a>三、 工作流程深度拆解（以网卡接收数据为例）</h2><p>为了让过程更具象，我们以 <strong>“网卡接收网络数据包（设备写数据到内存）”</strong> 为例，看看一整套 DMA 流程到底发生了什么：</p>
-<h4 id="Step-1-预留车位（内核初始化）"><a href="#Step-1-预留车位（内核初始化）" class="headerlink" title="Step 1: 预留车位（内核初始化）"></a>Step 1: 预留车位（内核初始化）</h4><p>在网卡还没收到任何数据之前，网卡驱动程序会在内核空间里申请一块物理地址连续的 <strong>DMA Buffer</strong>，并查到它的物理首地址（假设为 <code>0x1000</code>）。驱动将 <code>0x1000</code> 写入网卡的寄存器，告诉它：“数据来了就送到这里”。</p>
-<h4 id="Step-2-货物到达（设备内部暂存）"><a href="#Step-2-货物到达（设备内部暂存）" class="headerlink" title="Step 2: 货物到达（设备内部暂存）"></a>Step 2: 货物到达（设备内部暂存）</h4><p>一根网线传来了光电信号，网卡芯片解析出一个 1500 字节的包，暂时放在网卡内部极小的 SRAM 缓存（FIFO）中。</p>
-<h4 id="Step-3-疯狂搬砖（DMA-传输数据）"><a href="#Step-3-疯狂搬砖（DMA-传输数据）" class="headerlink" title="Step 3: 疯狂搬砖（DMA 传输数据）"></a>Step 3: 疯狂搬砖（DMA 传输数据）</h4><p>网卡发现 FIFO 有数据，立即启动其内部的 DMA 引擎（Bus Master）。DMA 引擎绕过 CPU，直接通过 PCIe 总线向主板发起内存写请求，将这 1500 字节的数据一点点“挤”进物理内存地址 <code>0x1000</code> 开始的 DMA Buffer 里。</p>
-<h4 id="Step-4-汇报工作（硬件中断）"><a href="#Step-4-汇报工作（硬件中断）" class="headerlink" title="Step 4: 汇报工作（硬件中断）"></a>Step 4: 汇报工作（硬件中断）</h4><p>数据全部写进 DMA Buffer 后，网卡通过系统总线向 CPU 发送一个<strong>硬件中断信号</strong>。相当于快递员把货放进了储物柜，然后按响了你家的门铃。</p>
-<h4 id="Step-5-CPU-验收（处理-Cache-并读取）"><a href="#Step-5-CPU-验收（处理-Cache-并读取）" class="headerlink" title="Step 5: CPU 验收（处理 Cache 并读取）"></a>Step 5: CPU 验收（处理 Cache 并读取）</h4><ul>
+<h2 id="三、-工作流程深度拆解（以网卡接收数据为例）">三、 工作流程深度拆解（以网卡接收数据为例）</h2>
+<p>为了让过程更具象，我们以 <strong>“网卡接收网络数据包（设备写数据到内存）”</strong> 为例，看看一整套 DMA 流程到底发生了什么：</p>
+<h4 id="Step-1-预留车位（内核初始化）">Step 1: 预留车位（内核初始化）</h4>
+<p>在网卡还没收到任何数据之前，网卡驱动程序会在内核空间里申请一块物理地址连续的 <strong>DMA Buffer</strong>，并查到它的物理首地址（假设为 <code>0x1000</code>）。驱动将 <code>0x1000</code> 写入网卡的寄存器，告诉它：“数据来了就送到这里”。</p>
+<h4 id="Step-2-货物到达（设备内部暂存）">Step 2: 货物到达（设备内部暂存）</h4>
+<p>一根网线传来了光电信号，网卡芯片解析出一个 1500 字节的包，暂时放在网卡内部极小的 SRAM 缓存（FIFO）中。</p>
+<h4 id="Step-3-疯狂搬砖（DMA-传输数据）">Step 3: 疯狂搬砖（DMA 传输数据）</h4>
+<p>网卡发现 FIFO 有数据，立即启动其内部的 DMA 引擎（Bus Master）。DMA 引擎绕过 CPU，直接通过 PCIe 总线向主板发起内存写请求，将这 1500 字节的数据一点点“挤”进物理内存地址 <code>0x1000</code> 开始的 DMA Buffer 里。</p>
+<h4 id="Step-4-汇报工作（硬件中断）">Step 4: 汇报工作（硬件中断）</h4>
+<p>数据全部写进 DMA Buffer 后，网卡通过系统总线向 CPU 发送一个<strong>硬件中断信号</strong>。相当于快递员把货放进了储物柜，然后按响了你家的门铃。</p>
+<h4 id="Step-5-CPU-验收（处理-Cache-并读取）">Step 5: CPU 验收（处理 Cache 并读取）</h4>
+<ul>
 <li>CPU 收到中断，暂停当前任务来处理网卡事件。</li>
 <li>CPU 先执行 <strong>Cache Invalidate</strong>（使缓存失效），确保自己不去读旧的缓存。</li>
 <li>CPU 从系统主存的 DMA Buffer 中读取这 1500 字节的真实网络包数据。</li>
-<li>操作系统内核剥离网络包的 TCP&#x2F;IP 报头，最后通过 Socket 将数据交给用户层的应用程序（如浏览器、微信）。</li>
+<li>操作系统内核剥离网络包的 TCP/IP 报头，最后通过 Socket 将数据交给用户层的应用程序（如浏览器、微信）。</li>
 </ul>
 <hr>
-<h2 id="四、DMA-remapping-与-IOMMU-的引入"><a href="#四、DMA-remapping-与-IOMMU-的引入" class="headerlink" title="四、DMA remapping 与 IOMMU 的引入"></a>四、DMA remapping 与 IOMMU 的引入</h2><p>在早期的电脑里，设备的 DMA 引擎是直接使用**系统物理地址（Physical Address, PA）**来读写内存的。这带来了三个致命问题：</p>
+<h2 id="四、DMA-remapping-与-IOMMU-的引入">四、DMA remapping 与 IOMMU 的引入</h2>
+<p>在早期的电脑里，设备的 DMA 引擎是直接使用**系统物理地址（Physical Address, PA）**来读写内存的。这带来了三个致命问题：</p>
 <ol>
-<li><strong>灾难一：安全漏洞（DMA 攻击 &#x2F; 内存越界）</strong><br>既然外设可以直接读写物理内存，那如果网卡驱动写错了，或者插上了一个<strong>恶意的 PCIe 设备</strong>（比如黑客特制的黑客U盘&#x2F;Thunderbolt设备），它就可以通过 DMA 悄悄读取操作系统的内核密码，或者直接把恶意代码写进操作系统的核心物理内存里！这叫 <strong>“DMA 攻击 (DMA Attack)”</strong>。系统对此毫无防备，因为 DMA 直接绕过了 CPU！</li>
-<li><strong>灾难二：32位老设备的“残疾”</strong><br>很多老旧的外设（比如老的 32 位声卡或网卡），它的 DMA 引擎最多只能寻址 $2^{32}$ &#x3D; 4GB 的物理内存。如果你电脑装了 16GB 内存，而操作系统刚好把 DMA Buffer 分配在了 8GB 的位置，这个老设备就“够不着”了。为了解决这个问题，内核只能搞个低地址的“替身缓冲区（Bounce Buffer）”，让 CPU 疯狂倒腾数据，性能大打折扣。</li>
-<li><strong>灾难三：虚拟机（VM）无法独占物理硬件</strong><br>在云计算时代，你想把主机的物理显卡（GPU）或者物理网卡直接分配给里面的一个虚拟机（这叫 <strong>PCIe Passthrough &#x2F; 直通技术</strong>）。但是，虚拟机操作系统看到的“物理地址”其实是假的（是宿主机给它的虚拟地址）。如果虚拟机把这个“假物理地址”交给真实的物理显卡去搞 DMA，显卡一写，主机的真实内存就全乱套了！</li>
+<li><strong>灾难一：安全漏洞（DMA 攻击 / 内存越界）</strong><br>
+既然外设可以直接读写物理内存，那如果网卡驱动写错了，或者插上了一个<strong>恶意的 PCIe 设备</strong>（比如黑客特制的黑客U盘/Thunderbolt设备），它就可以通过 DMA 悄悄读取操作系统的内核密码，或者直接把恶意代码写进操作系统的核心物理内存里！这叫 <strong>“DMA 攻击 (DMA Attack)”</strong>。系统对此毫无防备，因为 DMA 直接绕过了 CPU！</li>
+<li><strong>灾难二：32位老设备的“残疾”</strong><br>
+很多老旧的外设（比如老的 32 位声卡或网卡），它的 DMA 引擎最多只能寻址 $2^{32}$ = 4GB 的物理内存。如果你电脑装了 16GB 内存，而操作系统刚好把 DMA Buffer 分配在了 8GB 的位置，这个老设备就“够不着”了。为了解决这个问题，内核只能搞个低地址的“替身缓冲区（Bounce Buffer）”，让 CPU 疯狂倒腾数据，性能大打折扣。</li>
+<li><strong>灾难三：虚拟机（VM）无法独占物理硬件</strong><br>
+在云计算时代，你想把主机的物理显卡（GPU）或者物理网卡直接分配给里面的一个虚拟机（这叫 <strong>PCIe Passthrough / 直通技术</strong>）。但是，虚拟机操作系统看到的“物理地址”其实是假的（是宿主机给它的虚拟地址）。如果虚拟机把这个“假物理地址”交给真实的物理显卡去搞 DMA，显卡一写，主机的真实内存就全乱套了！</li>
 </ol>
 <hr>
-<h3 id="什么是-DMA-Remapping？"><a href="#什么是-DMA-Remapping？" class="headerlink" title="什么是 DMA Remapping？"></a>什么是 DMA Remapping？</h3><p><img src="/images/dma/1773661999059.png" alt="alt text"></p>
+<h3 id="什么是-DMA-Remapping？">什么是 DMA Remapping？</h3>
+<p><img src="/images/dma/1773661999059.png" alt="alt text"></p>
 <p>为了解决这些问题，Intel（VT-d 技术）和 AMD（AMD-Vi 技术）在主板的芯片组里塞进了一个新硬件：<strong>IOMMU</strong>。</p>
 <p><strong>DMA Remapping 的核心思想就是：给所有外设也配上一个“虚拟地址翻译官”和“安检员”。</strong></p>
-<p>有了 DMA Remapping 之后，外设看到的不再是真实的物理内存地址，而是一个叫做 <strong>IOVA（I&#x2F;O 虚拟地址，I&#x2F;O Virtual Address）</strong> 的东西。</p>
+<p>有了 DMA Remapping 之后，外设看到的不再是真实的物理内存地址，而是一个叫做 <strong>IOVA（I/O 虚拟地址，I/O Virtual Address）</strong> 的东西。</p>
 <p>它的工作原理如下：</p>
 <ol>
 <li><strong>分配 IOVA：</strong> 操作系统给网卡分配了一块 DMA Buffer（实际物理地址是打散的 <code>0x5000</code> 和 <code>0x9000</code>）。但操作系统通过 IOMMU 给网卡发了一个<strong>连续的虚拟地址（IOVA）</strong>：<code>0x1000</code> 到 <code>0x2000</code>。</li>
@@ -220,39 +241,385 @@
 <li><strong>安全放行：</strong> IOMMU 还会检查：“这个网卡有权限写 <code>0x5000</code> 吗？”如果有，放行并写入真实内存；如果没有（比如恶意设备想写内核区域），IOMMU 会直接<strong>阻断</strong>这个 DMA 请求，并向 CPU 报告一个严重错误。</li>
 </ol>
 <hr>
-<h3 id="DMA-Remapping-带来的收益"><a href="#DMA-Remapping-带来的收益" class="headerlink" title="DMA Remapping 带来的收益"></a>DMA Remapping 带来的收益</h3><h4 id="1-安全隔离（IOMMU-Protection）"><a href="#1-安全隔离（IOMMU-Protection）" class="headerlink" title="1. 安全隔离（IOMMU Protection）"></a>1. 安全隔离（IOMMU Protection）</h4><p>每个设备都有自己独立的 IOVA 空间。网卡只能读写网卡专属的虚拟地址，显卡只能读写显卡的。任何设备想越界访问其他物理内存，都会被 IOMMU 拦截。<strong>彻底终结了 DMA 攻击！</strong></p>
-<h4 id="2-化零为整，消灭内存碎片"><a href="#2-化零为整，消灭内存碎片" class="headerlink" title="2. 化零为整，消灭内存碎片"></a>2. 化零为整，消灭内存碎片</h4><p>现代系统很难找到大块连续的物理内存。有了重映射，操作系统可以把物理上<strong>支离破碎</strong>的内存页，通过 IOMMU 映射成一段<strong>连续的 IOVA</strong> 给设备用。<br>对外设来说：爽！我拿到了一大块连续的地址！<br>对系统来说：爽！我不用费劲去整理内存碎片了！</p>
-<h4 id="3-拯救-32-位老设备"><a href="#3-拯救-32-位老设备" class="headerlink" title="3. 拯救 32 位老设备"></a>3. 拯救 32 位老设备</h4><p>老设备只能访问 4GB 以下的地址？没关系！操作系统给它分配一个 4GB 以下的 IOVA（比如 <code>0x80000000</code>），然后 IOMMU 在底层把这个地址<strong>重映射</strong>到物理内存的 12GB 处。老设备浑然不知，却完美用上了高位内存，<strong>告别了低效的 Bounce Buffer（替身缓冲区）</strong>。</p>
-<h4 id="4-云计算的基石：硬件直通（Passthrough）"><a href="#4-云计算的基石：硬件直通（Passthrough）" class="headerlink" title="4. 云计算的基石：硬件直通（Passthrough）"></a>4. 云计算的基石：硬件直通（Passthrough）</h4><p>这是 DMA Remapping 最具商业价值的地方。<br>当宿主机把物理网卡直通给虚拟机时，虚拟机操作系统会把<strong>它以为的“物理地址 (GPA)”</strong> 给网卡。此时，宿主机的 IOMMU 会自动把这个 GPA <strong>重映射</strong>为宿主机的<strong>真实物理地址 (HPA)</strong>。<br>物理硬件就可以直接和虚拟机高速交换数据，性能几乎 0 损耗！</p>
+<h3 id="DMA-Remapping-带来的收益">DMA Remapping 带来的收益</h3>
+<h4 id="1-安全隔离（IOMMU-Protection）">1. 安全隔离（IOMMU Protection）</h4>
+<p>每个设备都有自己独立的 IOVA 空间。网卡只能读写网卡专属的虚拟地址，显卡只能读写显卡的。任何设备想越界访问其他物理内存，都会被 IOMMU 拦截。<strong>彻底终结了 DMA 攻击！</strong></p>
+<h4 id="2-化零为整，消灭内存碎片">2. 化零为整，消灭内存碎片</h4>
+<p>现代系统很难找到大块连续的物理内存。有了重映射，操作系统可以把物理上<strong>支离破碎</strong>的内存页，通过 IOMMU 映射成一段<strong>连续的 IOVA</strong> 给设备用。<br>
+对外设来说：爽！我拿到了一大块连续的地址！<br>
+对系统来说：爽！我不用费劲去整理内存碎片了！</p>
+<h4 id="3-拯救-32-位老设备">3. 拯救 32 位老设备</h4>
+<p>老设备只能访问 4GB 以下的地址？没关系！操作系统给它分配一个 4GB 以下的 IOVA（比如 <code>0x80000000</code>），然后 IOMMU 在底层把这个地址<strong>重映射</strong>到物理内存的 12GB 处。老设备浑然不知，却完美用上了高位内存，<strong>告别了低效的 Bounce Buffer（替身缓冲区）</strong>。</p>
+<h4 id="4-云计算的基石：硬件直通（Passthrough）">4. 云计算的基石：硬件直通（Passthrough）</h4>
+<p>这是 DMA Remapping 最具商业价值的地方。<br>
+当宿主机把物理网卡直通给虚拟机时，虚拟机操作系统会把<strong>它以为的“物理地址 (GPA)”</strong> 给网卡。此时，宿主机的 IOMMU 会自动把这个 GPA <strong>重映射</strong>为宿主机的<strong>真实物理地址 (HPA)</strong>。<br>
+物理硬件就可以直接和虚拟机高速交换数据，性能几乎 0 损耗！</p>
 <hr>
-<h2 id="五、DMA-remapping-的隔离机制"><a href="#五、DMA-remapping-的隔离机制" class="headerlink" title="五、DMA remapping 的隔离机制"></a>五、DMA remapping 的隔离机制</h2><p><strong>在一台物理服务器上，无论跑了多少个虚拟机（VM），物理主板上的 IOMMU 硬件通常只有一个（或少量的几个节点）。</strong></p>
+<h2 id="五、DMA-remapping-的隔离机制">五、DMA remapping 的隔离机制</h2>
+<p><strong>在一台物理服务器上，无论跑了多少个虚拟机（VM），物理主板上的 IOMMU 硬件通常只有一个（或少量的几个节点）。</strong></p>
 <p>既然所有的网卡、显卡直通（Passthrough）给不同的虚拟机时，<strong>全都要经过宿主机（Host）的这个唯一的 IOMMU 进行重映射</strong>，那么，这个单一的 IOMMU 凭什么能把 VM_A 的设备和 VM_B 的设备完美隔离开来，保证它们不会互相读写内存呢？</p>
 <p>这就引出了 DMA 重映射实现隔离的<strong>三大底层核心机制</strong>：</p>
 <hr>
-<h3 id="机制一：身份识别（Source-ID-BDF）——-查“发件人”"><a href="#机制一：身份识别（Source-ID-BDF）——-查“发件人”" class="headerlink" title="机制一：身份识别（Source ID &#x2F; BDF）—— 查“发件人”"></a>机制一：身份识别（Source ID &#x2F; BDF）—— 查“发件人”</h3><p>IOMMU 要做隔离，第一步必须知道：<strong>“现在的这个 DMA 请求，到底是哪个外设发出来的？”</strong></p>
-<p>在 PCIe 总线架构中，每一个硬件设备都有一个全球（全系统）唯一的编号，叫做 <strong>BDF（Bus:Device.Function，总线号:设备号.功能号）</strong>。<br>你可以把它理解为每个设备的**“身份证号”或“发件人号码”**。</p>
-<p>当物理网卡（直通给 VM_A）向主板发起一次 DMA 内存读写请求时，这个请求的硬件数据包（PCIe TLP 报文）里，<strong>必然会强行带上它自己的 BDF 号（Source ID）</strong>。<br>IOMMU 硬件就守在总线路口，每次拦下 DMA 请求，第一件事就是提取这个 BDF 号。</p>
+<h3 id="机制一：身份识别（Source-ID-BDF）——-查“发件人”">机制一：身份识别（Source ID / BDF）—— 查“发件人”</h3>
+<p>IOMMU 要做隔离，第一步必须知道：<strong>“现在的这个 DMA 请求，到底是哪个外设发出来的？”</strong></p>
+<p>在 PCIe 总线架构中，每一个硬件设备都有一个全球（全系统）唯一的编号，叫做 <strong>BDF（Bus:Device.Function，总线号:设备号.功能号）</strong>。<br>
+你可以把它理解为每个设备的**“身份证号”或“发件人号码”**。</p>
+<p>当物理网卡（直通给 VM_A）向主板发起一次 DMA 内存读写请求时，这个请求的硬件数据包（PCIe TLP 报文）里，<strong>必然会强行带上它自己的 BDF 号（Source ID）</strong>。<br>
+IOMMU 硬件就守在总线路口，每次拦下 DMA 请求，第一件事就是提取这个 BDF 号。</p>
 <hr>
-<h3 id="机制二：上下文表（Context-Table）与保护域（Domain）——-查“专属字典”"><a href="#机制二：上下文表（Context-Table）与保护域（Domain）——-查“专属字典”" class="headerlink" title="机制二：上下文表（Context Table）与保护域（Domain）—— 查“专属字典”"></a>机制二：上下文表（Context Table）与保护域（Domain）—— 查“专属字典”</h3><p>既然知道了是哪个设备发出的，IOMMU 怎么决定用哪套规则呢？</p>
-<p>宿主机（Hypervisor &#x2F; Host OS，比如 KVM&#x2F;ESXi）在启动虚拟机、分配设备时，会在物理内存里帮 IOMMU 建一套极其严密的<strong>多级查询表（Root Table -&gt; Context Table）</strong>。</p>
+<h3 id="机制二：上下文表（Context-Table）与保护域（Domain）——-查“专属字典”">机制二：上下文表（Context Table）与保护域（Domain）—— 查“专属字典”</h3>
+<p>既然知道了是哪个设备发出的，IOMMU 怎么决定用哪套规则呢？</p>
+<p>宿主机（Hypervisor / Host OS，比如 KVM/ESXi）在启动虚拟机、分配设备时，会在物理内存里帮 IOMMU 建一套极其严密的<strong>多级查询表（Root Table -&gt; Context Table）</strong>。</p>
 <ol>
 <li><strong>建立保护域（Protection Domain）：</strong> 宿主机给 VM_A 分配一个独立的域（Domain A），给 VM_B 分配一个独立的域（Domain B）。</li>
 <li><strong>分配专属页表（Page Table）：</strong> 宿主机为 Domain A 创建一套专属的 <strong>“GPA 到 HPA（客户机物理地址 -&gt; 宿主机物理地址）”</strong> 的翻译页表；同理为 Domain B 也创建一套。</li>
-<li><strong>绑定 BDF 与页表：</strong> 宿主机把设备的 BDF 填进 IOMMU 的上下文表里。<ul>
+<li><strong>绑定 BDF 与页表：</strong> 宿主机把设备的 BDF 填进 IOMMU 的上下文表里。
+<ul>
 <li>告诉 IOMMU：“只要看到 BDF 是 <code>03:00.0</code>（网卡），它属于 Domain A，请查 A 的页表！”</li>
 <li>“看到 BDF 是 <code>04:00.0</code>（显卡），它属于 Domain B，请查 B 的页表！”</li>
 </ul>
 </li>
 </ol>
-<p><strong>这就是隔离的核心原理：</strong><br>因为 VM_A 的设备只能使用 Domain A 的页表，而 <strong>Domain A 的页表里，绝对不可能包含 VM_B 的物理内存地址（HPA）</strong>。<br>如果 VM_A 的黑客控制网卡，试图生成一个指向 VM_B 内存的虚拟地址，IOMMU 在 Domain A 的页表里<strong>根本查不到这个映射记录</strong>（或者权限被标记为不可写），就会直接报 <code>IOMMU Fault</code>，把这个 DMA 攻击当场击毙！</p>
+<p><strong>这就是隔离的核心原理：</strong><br>
+因为 VM_A 的设备只能使用 Domain A 的页表，而 <strong>Domain A 的页表里，绝对不可能包含 VM_B 的物理内存地址（HPA）</strong>。<br>
+如果 VM_A 的黑客控制网卡，试图生成一个指向 VM_B 内存的虚拟地址，IOMMU 在 Domain A 的页表里<strong>根本查不到这个映射记录</strong>（或者权限被标记为不可写），就会直接报 <code>IOMMU Fault</code>，把这个 DMA 攻击当场击毙！</p>
 <hr>
-<h3 id="机制三：IOMMU-组（IOMMU-Group）与-ACS-技术-——-堵住“抄近道”的漏洞"><a href="#机制三：IOMMU-组（IOMMU-Group）与-ACS-技术-——-堵住“抄近道”的漏洞" class="headerlink" title="机制三：IOMMU 组（IOMMU Group）与 ACS 技术 —— 堵住“抄近道”的漏洞"></a>机制三：IOMMU 组（IOMMU Group）与 ACS 技术 —— 堵住“抄近道”的漏洞</h3><p>前面的逻辑听起来很完美，但现实中的硬件拓扑非常复杂，这里有一个极其危险的漏洞。</p>
-<p>假设主板上有一个 PCIe 交换机（PCIe Switch），下面插着两个设备：网卡 1（给 VM_A）和网卡 2（给 VM_B）。<br>在 PCIe 规范里，有一个机制叫 <strong>Peer-to-Peer（端到端通信）</strong>。网卡 1 发出的 DMA 请求，如果在 PCIe 交换机这一层发现目标地址刚好是网卡 2，交换机会直接把数据抄近道发给网卡 2，<strong>根本不往上层送，彻底绕过了主板上的 IOMMU！</strong><br>如果发生了这种事，隔离就成了笑话，VM_A 就能直接攻击 VM_B 的设备了。</p>
+<h3 id="机制三：IOMMU-组（IOMMU-Group）与-ACS-技术-——-堵住“抄近道”的漏洞">机制三：IOMMU 组（IOMMU Group）与 ACS 技术 —— 堵住“抄近道”的漏洞</h3>
+<p>前面的逻辑听起来很完美，但现实中的硬件拓扑非常复杂，这里有一个极其危险的漏洞。</p>
+<p>假设主板上有一个 PCIe 交换机（PCIe Switch），下面插着两个设备：网卡 1（给 VM_A）和网卡 2（给 VM_B）。<br>
+在 PCIe 规范里，有一个机制叫 <strong>Peer-to-Peer（端到端通信）</strong>。网卡 1 发出的 DMA 请求，如果在 PCIe 交换机这一层发现目标地址刚好是网卡 2，交换机会直接把数据抄近道发给网卡 2，<strong>根本不往上层送，彻底绕过了主板上的 IOMMU！</strong><br>
+如果发生了这种事，隔离就成了笑话，VM_A 就能直接攻击 VM_B 的设备了。</p>
 <p>为了堵住这个漏洞，实现真正的 DMA 隔离，硬件和 Linux 内核引入了两个关键概念：</p>
 <ol>
-<li><strong>PCIe ACS（Access Control Services，访问控制服务）：</strong><br>这是一种高级 PCIe 硬件特性。宿主机会强行开启主板和 PCIe 交换机的 ACS 功能。它的作用是：<strong>禁止任何底层的“抄近道”行为</strong>。所有设备的 DMA 请求，无论发给谁，必须全部“滚上去”给 IOMMU 审查一遍。不支持 ACS 的主板，做虚拟机直通是非常危险的。</li>
-<li><strong>IOMMU Group（Linux VFIO 机制）：</strong><br>这是宿主机内核里管理隔离的最小单位。<br>如果系统发现几个设备共享同一个不支持 ACS 的 PCIe 桥（它们可能互相串通绕过 IOMMU），Linux 内核就会把这几个设备强制绑定进<strong>同一个 IOMMU Group</strong>。<br><strong>规则是极其霸道的：</strong> 一个 IOMMU Group 里的所有设备，要么全部直通给同一个虚拟机（VM_A），要么全留在宿主机。<strong>绝对不允许</strong>把同一个 Group 里的设备拆开分给不同的虚拟机。这就从物理拓扑上彻底杜绝了跨虚拟机的 DMA 泄露。</li>
+<li><strong>PCIe ACS（Access Control Services，访问控制服务）：</strong><br>
+这是一种高级 PCIe 硬件特性。宿主机会强行开启主板和 PCIe 交换机的 ACS 功能。它的作用是：<strong>禁止任何底层的“抄近道”行为</strong>。所有设备的 DMA 请求，无论发给谁，必须全部“滚上去”给 IOMMU 审查一遍。不支持 ACS 的主板，做虚拟机直通是非常危险的。</li>
+<li><strong>IOMMU Group（Linux VFIO 机制）：</strong><br>
+这是宿主机内核里管理隔离的最小单位。<br>
+如果系统发现几个设备共享同一个不支持 ACS 的 PCIe 桥（它们可能互相串通绕过 IOMMU），Linux 内核就会把这几个设备强制绑定进<strong>同一个 IOMMU Group</strong>。<br>
+<strong>规则是极其霸道的：</strong> 一个 IOMMU Group 里的所有设备，要么全部直通给同一个虚拟机（VM_A），要么全留在宿主机。<strong>绝对不允许</strong>把同一个 Group 里的设备拆开分给不同的虚拟机。这就从物理拓扑上彻底杜绝了跨虚拟机的 DMA 泄露。</li>
 </ol>
 <hr>
-<h2 id="结语"><a href="#结语" class="headerlink" title="结语"></a>结语</h2><p>DMA 的本质是一场 <strong>“权利的下放”</strong>。通过硬件层面的数据旁路机制、专属的 DMA 缓冲区以及复杂的 Cache 协调机制，计算机系统实现了外设与内存之间的高速直连。而 DMA Remapping 和 IOMMU 的引入，则是对这一机制的<strong>安全加固</strong>和<strong>功能扩展</strong>，让我们在享受高性能的同时，也能高枕无忧地使用各种外设，甚至在云计算时代实现虚拟机的安全直通。</p>
-</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://ihanzh.github.io">Han Zhang</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://ihanzh.github.io/2026/03/16/dma/">https://ihanzh.github.io/2026/03/16/dma/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://ihanzh.github.io" target="_blank">Han</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E8%AE%A1%E7%AE%97%E6%9C%BA%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84/">计算机体系结构</a><a class="post-meta__tags" href="/tags/DMA/">DMA</a></div><div class="post-share"><div class="social-share" data-image="/img/avatar.jpg" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2026/03/18/kvm/" title="KVM：通过匿名 inode 实现 VM fd 的文件操作"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">KVM：通过匿名 inode 实现 VM fd 的文件操作</div></div><div class="info-2"><div class="info-item-1">背景：&#x2F;dev&#x2F;kvm 与 ioctls在 Linux 中，用户态通过打开 /dev/kvm 来访问 KVM 功能。内核中对应的设备驱动注册了一个 character device，其 file_operations 定义了 unlocked_ioctl，指向 kvm_dev_ioctl()： static const struct file_operations kvm_chardev_ops = &#123;     .owner          = THIS_MODULE,     .unlocked_ioctl = kvm_dev_ioctl,     .llseek         = noop_llseek,     KVM_COMPAT(kvm_dev_ioctl), &#125;;  当用户态调用 ioctl(fd, KVM_CREATE_VM, type) 时，内核走到了 kvm_dev_ioctl()，并最终创建了一个新的 VM 对象。  1. KVM_CREATE_VM: 创建一个新的 VM fd调用流程大致如下： kvm_dev_io...</div></div></div></a><a class="pagination-related" href="/2026/03/16/pcie/" title="PCIe 原理和资源访问"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">PCIe 原理和资源访问</div></div><div class="info-2"><div class="info-item-1">本文是对 PCIe 原理和资源访问 视频内容的整理和总结。 一、 PCIe 基本原理与通信机制PCIe 的设计与早期的 PCI 总线有着本质的区别。   拓扑结构差异：传统的 PCI 采用的是总线拓扑，设备之间需要进行总线仲裁，并且共享带宽 。而 PCIe 采用的是树形拓扑，实现了端到端的通信，每个设备都能独享链路带宽 。  物理层通信：PCIe 的两个端点通过双 Link 进行全双工传输 。其中一个 Link 负责发送（Tx），另一个负责接收（Rx），这两个 Link 共同组成了一个 Lane（通道） 。  灵活的带宽配置：一条 PCIe 传输链路可以由多个 Lane 组成，系统支持 1、2、4、8、16 甚至 32 个 Lane，以此来灵活匹配不同设备对带宽的需求 。   二、 PCIe 核心组件架构在 PCIe 的树形拓扑中，有三个核心组件构成了整个网络 ：  Root Complex (RC)：这是连接 CPU、内存与 PCIe 树的“根节点”，它不仅负责 CPU&#x2F;内存与 PCIe 设备之间的数据传输，还处理设备间的 P2P 通信，并实现 IOMMU 功能 。 ...</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/03/16/pcie/" title="PCIe 原理和资源访问"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-03-16</div><div class="info-item-2">PCIe 原理和资源访问</div></div><div class="info-2"><div class="info-item-1">本文是对 PCIe 原理和资源访问 视频内容的整理和总结。 一、 PCIe 基本原理与通信机制PCIe 的设计与早期的 PCI 总线有着本质的区别。   拓扑结构差异：传统的 PCI 采用的是总线拓扑，设备之间需要进行总线仲裁，并且共享带宽 。而 PCIe 采用的是树形拓扑，实现了端到端的通信，每个设备都能独享链路带宽 。  物理层通信：PCIe 的两个端点通过双 Link 进行全双工传输 。其中一个 Link 负责发送（Tx），另一个负责接收（Rx），这两个 Link 共同组成了一个 Lane（通道） 。  灵活的带宽配置：一条 PCIe 传输链路可以由多个 Lane 组成，系统支持 1、2、4、8、16 甚至 32 个 Lane，以此来灵活匹配不同设备对带宽的需求 。   二、 PCIe 核心组件架构在 PCIe 的树形拓扑中，有三个核心组件构成了整个网络 ：  Root Complex (RC)：这是连接 CPU、内存与 PCIe 树的“根节点”，它不仅负责 CPU&#x2F;内存与 PCIe 设备之间的数据传输，还处理设备间的 P2P 通信，并实现 IOMMU 功能 。 ...</div></div></div></a></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.jpg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Han Zhang</div><div class="author-info-description">内核与虚拟化技术</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">10</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">18</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">4</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/ihanzh"><i class="fab fa-github"></i><span>Follow Me</span></a></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%80%E3%80%81-%E6%A0%B8%E5%BF%83%E6%A6%82%E5%BF%B5%EF%BC%9A%E4%BB%80%E4%B9%88%E6%98%AF-DMA-%E4%B8%8E-DMA-Buffer%EF%BC%9F"><span class="toc-number">1.</span> <span class="toc-text">一、 核心概念：什么是 DMA 与 DMA Buffer？</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#1-DMA%EF%BC%88%E7%9B%B4%E6%8E%A5%E5%86%85%E5%AD%98%E8%AE%BF%E9%97%AE%EF%BC%89"><span class="toc-number">1.1.</span> <span class="toc-text">1. DMA（直接内存访问）</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-DMA-Buffer%EF%BC%88DMA-%E7%BC%93%E5%86%B2%E5%8C%BA%EF%BC%89"><span class="toc-number">1.2.</span> <span class="toc-text">2. DMA Buffer（DMA 缓冲区）</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%8C%E3%80%81-%E7%89%B9%E5%88%AB%E6%B3%A8%E6%84%8F%E7%82%B9%EF%BC%88%E6%B7%B1%E5%85%A5%E5%BA%95%E5%B1%82%E7%9A%84-3-%E4%B8%AA%E5%A4%A7%E5%9D%91%EF%BC%89"><span class="toc-number">2.</span> <span class="toc-text">二、 特别注意点（深入底层的 3 个大坑）</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E2%9A%A0%EF%B8%8F-1-Cache-%E4%B8%80%E8%87%B4%E6%80%A7%EF%BC%88Cache-Coherence%EF%BC%89%E9%97%AE%E9%A2%98-%E2%80%94%E2%80%94-%E6%9C%80%E5%AE%B9%E6%98%93%E7%BF%BB%E8%BD%A6%E7%9A%84%E5%9C%B0%E6%96%B9"><span class="toc-number">2.1.</span> <span class="toc-text">⚠️ 1. Cache 一致性（Cache Coherence）问题 —— 最容易翻车的地方</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E2%9A%A0%EF%B8%8F-2-%E7%89%A9%E7%90%86%E5%9C%B0%E5%9D%80%E4%B8%8E%E8%99%9A%E6%8B%9F%E5%9C%B0%E5%9D%80%E7%9A%84%E9%B8%BF%E6%B2%9F"><span class="toc-number">2.2.</span> <span class="toc-text">⚠️ 2. 物理地址与虚拟地址的鸿沟</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E2%9A%A0%EF%B8%8F-3-%E5%86%85%E5%AD%98%E5%BF%85%E9%A1%BB%E8%A2%AB%E2%80%9C%E9%94%81%E5%AE%9A%EF%BC%88Pinned%EF%BC%89%E2%80%9D"><span class="toc-number">2.3.</span> <span class="toc-text">⚠️ 3. 内存必须被“锁定（Pinned）”</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%89%E3%80%81-%E5%B7%A5%E4%BD%9C%E6%B5%81%E7%A8%8B%E6%B7%B1%E5%BA%A6%E6%8B%86%E8%A7%A3%EF%BC%88%E4%BB%A5%E7%BD%91%E5%8D%A1%E6%8E%A5%E6%94%B6%E6%95%B0%E6%8D%AE%E4%B8%BA%E4%BE%8B%EF%BC%89"><span class="toc-number">3.</span> <span class="toc-text">三、 工作流程深度拆解（以网卡接收数据为例）</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#Step-1-%E9%A2%84%E7%95%99%E8%BD%A6%E4%BD%8D%EF%BC%88%E5%86%85%E6%A0%B8%E5%88%9D%E5%A7%8B%E5%8C%96%EF%BC%89"><span class="toc-number">3.1.</span> <span class="toc-text">Step 1: 预留车位（内核初始化）</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#Step-2-%E8%B4%A7%E7%89%A9%E5%88%B0%E8%BE%BE%EF%BC%88%E8%AE%BE%E5%A4%87%E5%86%85%E9%83%A8%E6%9A%82%E5%AD%98%EF%BC%89"><span class="toc-number">3.2.</span> <span class="toc-text">Step 2: 货物到达（设备内部暂存）</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#Step-3-%E7%96%AF%E7%8B%82%E6%90%AC%E7%A0%96%EF%BC%88DMA-%E4%BC%A0%E8%BE%93%E6%95%B0%E6%8D%AE%EF%BC%89"><span class="toc-number">3.3.</span> <span class="toc-text">Step 3: 疯狂搬砖（DMA 传输数据）</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#Step-4-%E6%B1%87%E6%8A%A5%E5%B7%A5%E4%BD%9C%EF%BC%88%E7%A1%AC%E4%BB%B6%E4%B8%AD%E6%96%AD%EF%BC%89"><span class="toc-number">3.4.</span> <span class="toc-text">Step 4: 汇报工作（硬件中断）</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#Step-5-CPU-%E9%AA%8C%E6%94%B6%EF%BC%88%E5%A4%84%E7%90%86-Cache-%E5%B9%B6%E8%AF%BB%E5%8F%96%EF%BC%89"><span class="toc-number">3.5.</span> <span class="toc-text">Step 5: CPU 验收（处理 Cache 并读取）</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%9B%9B%E3%80%81DMA-remapping-%E4%B8%8E-IOMMU-%E7%9A%84%E5%BC%95%E5%85%A5"><span class="toc-number">4.</span> <span class="toc-text">四、DMA remapping 与 IOMMU 的引入</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%BB%80%E4%B9%88%E6%98%AF-DMA-Remapping%EF%BC%9F"><span class="toc-number">4.1.</span> <span class="toc-text">什么是 DMA Remapping？</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#DMA-Remapping-%E5%B8%A6%E6%9D%A5%E7%9A%84%E6%94%B6%E7%9B%8A"><span class="toc-number">4.2.</span> <span class="toc-text">DMA Remapping 带来的收益</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#1-%E5%AE%89%E5%85%A8%E9%9A%94%E7%A6%BB%EF%BC%88IOMMU-Protection%EF%BC%89"><span class="toc-number">4.2.1.</span> <span class="toc-text">1. 安全隔离（IOMMU Protection）</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#2-%E5%8C%96%E9%9B%B6%E4%B8%BA%E6%95%B4%EF%BC%8C%E6%B6%88%E7%81%AD%E5%86%85%E5%AD%98%E7%A2%8E%E7%89%87"><span class="toc-number">4.2.2.</span> <span class="toc-text">2. 化零为整，消灭内存碎片</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#3-%E6%8B%AF%E6%95%91-32-%E4%BD%8D%E8%80%81%E8%AE%BE%E5%A4%87"><span class="toc-number">4.2.3.</span> <span class="toc-text">3. 拯救 32 位老设备</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#4-%E4%BA%91%E8%AE%A1%E7%AE%97%E7%9A%84%E5%9F%BA%E7%9F%B3%EF%BC%9A%E7%A1%AC%E4%BB%B6%E7%9B%B4%E9%80%9A%EF%BC%88Passthrough%EF%BC%89"><span class="toc-number">4.2.4.</span> <span class="toc-text">4. 云计算的基石：硬件直通（Passthrough）</span></a></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%94%E3%80%81DMA-remapping-%E7%9A%84%E9%9A%94%E7%A6%BB%E6%9C%BA%E5%88%B6"><span class="toc-number">5.</span> <span class="toc-text">五、DMA remapping 的隔离机制</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%9C%BA%E5%88%B6%E4%B8%80%EF%BC%9A%E8%BA%AB%E4%BB%BD%E8%AF%86%E5%88%AB%EF%BC%88Source-ID-BDF%EF%BC%89%E2%80%94%E2%80%94-%E6%9F%A5%E2%80%9C%E5%8F%91%E4%BB%B6%E4%BA%BA%E2%80%9D"><span class="toc-number">5.1.</span> <span class="toc-text">机制一：身份识别（Source ID &#x2F; BDF）—— 查“发件人”</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%9C%BA%E5%88%B6%E4%BA%8C%EF%BC%9A%E4%B8%8A%E4%B8%8B%E6%96%87%E8%A1%A8%EF%BC%88Context-Table%EF%BC%89%E4%B8%8E%E4%BF%9D%E6%8A%A4%E5%9F%9F%EF%BC%88Domain%EF%BC%89%E2%80%94%E2%80%94-%E6%9F%A5%E2%80%9C%E4%B8%93%E5%B1%9E%E5%AD%97%E5%85%B8%E2%80%9D"><span class="toc-number">5.2.</span> <span class="toc-text">机制二：上下文表（Context Table）与保护域（Domain）—— 查“专属字典”</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%9C%BA%E5%88%B6%E4%B8%89%EF%BC%9AIOMMU-%E7%BB%84%EF%BC%88IOMMU-Group%EF%BC%89%E4%B8%8E-ACS-%E6%8A%80%E6%9C%AF-%E2%80%94%E2%80%94-%E5%A0%B5%E4%BD%8F%E2%80%9C%E6%8A%84%E8%BF%91%E9%81%93%E2%80%9D%E7%9A%84%E6%BC%8F%E6%B4%9E"><span class="toc-number">5.3.</span> <span class="toc-text">机制三：IOMMU 组（IOMMU Group）与 ACS 技术 —— 堵住“抄近道”的漏洞</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%BB%93%E8%AF%AD"><span class="toc-number">6.</span> <span class="toc-text">结语</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/04/15/vfio/" title="VFIO：userspace 设备直通与虚拟机访问">VFIO：userspace 设备直通与虚拟机访问</a><time datetime="2026-04-14T16:00:00.000Z" title="发表于 2026-04-15 00:00:00">2026-04-15</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/04/01/vring/" title="VRing 数据结构">VRing 数据结构</a><time datetime="2026-04-01T11:00:00.000Z" title="发表于 2026-04-01 19:00:00">2026-04-01</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/03/21/kata-class/" title="Kata runtime 关键组件分析">Kata runtime 关键组件分析</a><time datetime="2026-03-20T16:00:00.000Z" title="发表于 2026-03-21 00:00:00">2026-03-21</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/03/21/kata-runtime/" title="Kata runtime 启动流程">Kata runtime 启动流程</a><time datetime="2026-03-20T16:00:00.000Z" title="发表于 2026-03-21 00:00:00">2026-03-21</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/03/18/qemu-vcpu-start/" title="QEMU vCPU 线程启动全流程">QEMU vCPU 线程启动全流程</a><time datetime="2026-03-18T04:00:00.000Z" title="发表于 2026-03-18 12:00:00">2026-03-18</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By Han Zhang</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.1</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.4</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.4"></script><script src="/js/main.js?v=5.5.4"></script><div class="js-pjax"></div><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>
+<h2 id="结语">结语</h2>
+<p>DMA 的本质是一场 <strong>“权利的下放”</strong>。通过硬件层面的数据旁路机制、专属的 DMA 缓冲区以及复杂的 Cache 协调机制，计算机系统实现了外设与内存之间的高速直连。而 DMA Remapping 和 IOMMU 的引入，则是对这一机制的<strong>安全加固</strong>和<strong>功能扩展</strong>，让我们在享受高性能的同时，也能高枕无忧地使用各种外设，甚至在云计算时代实现虚拟机的安全直通。</p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://ihanzh.github.io">Han Zhang</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://ihanzh.github.io/2026/03/16/dma/">https://ihanzh.github.io/2026/03/16/dma/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://ihanzh.github.io" target="_blank">Han</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E8%AE%A1%E7%AE%97%E6%9C%BA%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84/">计算机体系结构</a><a class="post-meta__tags" href="/tags/DMA/">DMA</a></div><div class="post-share"><div class="social-share" data-image="/img/avatar.jpg" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2026/03/18/kvm/" title="KVM：通过匿名 inode 实现 VM fd 的文件操作"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">KVM：通过匿名 inode 实现 VM fd 的文件操作</div></div><div class="info-2"><div class="info-item-1">背景：/dev/kvm 与 ioctls 在 Linux 中，用户态通过打开 /dev/kvm 来访问 KVM 功能。内核中对应的设备驱动注册了一个 character device，其 file_operations 定义了 unlocked_ioctl，指向 kvm_dev_ioctl()： static const struct file_operations kvm_chardev_ops = &#123;     .owner          = THIS_MODULE,     .unlocked_ioctl = kvm_dev_ioctl,     .llseek         = noop_llseek,     KVM_COMPAT(kvm_dev_ioctl), &#125;; 当用户态调用 ioctl(fd, KVM_CREATE_VM, type) 时，内核走到了 kvm_dev_ioctl()，并最终创建了一个新的 VM 对象。  1. KVM_CREATE_VM: 创建一个新的 VM fd 调用流程大致如下： kvm_dev_ioctl() | |...</div></div></div></a><a class="pagination-related" href="/2026/03/16/pcie/" title="PCIe 原理和资源访问"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">PCIe 原理和资源访问</div></div><div class="info-2"><div class="info-item-1">本文是对 PCIe 原理和资源访问 视频内容的整理和总结。 一、 PCIe 基本原理与通信机制 PCIe 的设计与早期的 PCI 总线有着本质的区别。    拓扑结构差异：传统的 PCI 采用的是总线拓扑，设备之间需要进行总线仲裁，并且共享带宽 。而 PCIe 采用的是树形拓扑，实现了端到端的通信，每个设备都能独享链路带宽 。   物理层通信：PCIe 的两个端点通过双 Link 进行全双工传输 。其中一个 Link 负责发送（Tx），另一个负责接收（Rx），这两个 Link 共同组成了一个 Lane（通道） 。   灵活的带宽配置：一条 PCIe 传输链路可以由多个 Lane 组成，系统支持 1、2、4、8、16 甚至 32 个 Lane，以此来灵活匹配不同设备对带宽的需求 。   二、 PCIe 核心组件架构 在 PCIe 的树形拓扑中，有三个核心组件构成了整个网络 ：   Root Complex (RC)：这是连接 CPU、内存与 PCIe 树的“根节点”，它不仅负责 CPU/内存与 PCIe 设备之间的数据传输，还处理设备间的 P2P 通信，并实现 IOMMU 功能 。...</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/03/16/pcie/" title="PCIe 原理和资源访问"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-03-16</div><div class="info-item-2">PCIe 原理和资源访问</div></div><div class="info-2"><div class="info-item-1">本文是对 PCIe 原理和资源访问 视频内容的整理和总结。 一、 PCIe 基本原理与通信机制 PCIe 的设计与早期的 PCI 总线有着本质的区别。    拓扑结构差异：传统的 PCI 采用的是总线拓扑，设备之间需要进行总线仲裁，并且共享带宽 。而 PCIe 采用的是树形拓扑，实现了端到端的通信，每个设备都能独享链路带宽 。   物理层通信：PCIe 的两个端点通过双 Link 进行全双工传输 。其中一个 Link 负责发送（Tx），另一个负责接收（Rx），这两个 Link 共同组成了一个 Lane（通道） 。   灵活的带宽配置：一条 PCIe 传输链路可以由多个 Lane 组成，系统支持 1、2、4、8、16 甚至 32 个 Lane，以此来灵活匹配不同设备对带宽的需求 。   二、 PCIe 核心组件架构 在 PCIe 的树形拓扑中，有三个核心组件构成了整个网络 ：   Root Complex (RC)：这是连接 CPU、内存与 PCIe 树的“根节点”，它不仅负责 CPU/内存与 PCIe 设备之间的数据传输，还处理设备间的 P2P 通信，并实现 IOMMU 功能 。...</div></div></div></a></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.jpg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Han Zhang</div><div class="author-info-description">内核与虚拟化技术</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">10</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">18</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">4</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/ihanzh"><i class="fab fa-github"></i><span>Follow Me</span></a></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%80%E3%80%81-%E6%A0%B8%E5%BF%83%E6%A6%82%E5%BF%B5%EF%BC%9A%E4%BB%80%E4%B9%88%E6%98%AF-DMA-%E4%B8%8E-DMA-Buffer%EF%BC%9F"><span class="toc-number">1.</span> <span class="toc-text">一、 核心概念：什么是 DMA 与 DMA Buffer？</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#1-DMA%EF%BC%88%E7%9B%B4%E6%8E%A5%E5%86%85%E5%AD%98%E8%AE%BF%E9%97%AE%EF%BC%89"><span class="toc-number">1.1.</span> <span class="toc-text">1. DMA（直接内存访问）</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-DMA-Buffer%EF%BC%88DMA-%E7%BC%93%E5%86%B2%E5%8C%BA%EF%BC%89"><span class="toc-number">1.2.</span> <span class="toc-text">2. DMA Buffer（DMA 缓冲区）</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%8C%E3%80%81-%E7%89%B9%E5%88%AB%E6%B3%A8%E6%84%8F%E7%82%B9%EF%BC%88%E6%B7%B1%E5%85%A5%E5%BA%95%E5%B1%82%E7%9A%84-3-%E4%B8%AA%E5%A4%A7%E5%9D%91%EF%BC%89"><span class="toc-number">2.</span> <span class="toc-text">二、 特别注意点（深入底层的 3 个大坑）</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E2%9A%A0%EF%B8%8F-1-Cache-%E4%B8%80%E8%87%B4%E6%80%A7%EF%BC%88Cache-Coherence%EF%BC%89%E9%97%AE%E9%A2%98-%E2%80%94%E2%80%94-%E6%9C%80%E5%AE%B9%E6%98%93%E7%BF%BB%E8%BD%A6%E7%9A%84%E5%9C%B0%E6%96%B9"><span class="toc-number">2.1.</span> <span class="toc-text">⚠️ 1. Cache 一致性（Cache Coherence）问题 —— 最容易翻车的地方</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E2%9A%A0%EF%B8%8F-2-%E7%89%A9%E7%90%86%E5%9C%B0%E5%9D%80%E4%B8%8E%E8%99%9A%E6%8B%9F%E5%9C%B0%E5%9D%80%E7%9A%84%E9%B8%BF%E6%B2%9F"><span class="toc-number">2.2.</span> <span class="toc-text">⚠️ 2. 物理地址与虚拟地址的鸿沟</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E2%9A%A0%EF%B8%8F-3-%E5%86%85%E5%AD%98%E5%BF%85%E9%A1%BB%E8%A2%AB%E2%80%9C%E9%94%81%E5%AE%9A%EF%BC%88Pinned%EF%BC%89%E2%80%9D"><span class="toc-number">2.3.</span> <span class="toc-text">⚠️ 3. 内存必须被“锁定（Pinned）”</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%89%E3%80%81-%E5%B7%A5%E4%BD%9C%E6%B5%81%E7%A8%8B%E6%B7%B1%E5%BA%A6%E6%8B%86%E8%A7%A3%EF%BC%88%E4%BB%A5%E7%BD%91%E5%8D%A1%E6%8E%A5%E6%94%B6%E6%95%B0%E6%8D%AE%E4%B8%BA%E4%BE%8B%EF%BC%89"><span class="toc-number">3.</span> <span class="toc-text">三、 工作流程深度拆解（以网卡接收数据为例）</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#Step-1-%E9%A2%84%E7%95%99%E8%BD%A6%E4%BD%8D%EF%BC%88%E5%86%85%E6%A0%B8%E5%88%9D%E5%A7%8B%E5%8C%96%EF%BC%89"><span class="toc-number">3.1.</span> <span class="toc-text">Step 1: 预留车位（内核初始化）</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#Step-2-%E8%B4%A7%E7%89%A9%E5%88%B0%E8%BE%BE%EF%BC%88%E8%AE%BE%E5%A4%87%E5%86%85%E9%83%A8%E6%9A%82%E5%AD%98%EF%BC%89"><span class="toc-number">3.2.</span> <span class="toc-text">Step 2: 货物到达（设备内部暂存）</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#Step-3-%E7%96%AF%E7%8B%82%E6%90%AC%E7%A0%96%EF%BC%88DMA-%E4%BC%A0%E8%BE%93%E6%95%B0%E6%8D%AE%EF%BC%89"><span class="toc-number">3.3.</span> <span class="toc-text">Step 3: 疯狂搬砖（DMA 传输数据）</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#Step-4-%E6%B1%87%E6%8A%A5%E5%B7%A5%E4%BD%9C%EF%BC%88%E7%A1%AC%E4%BB%B6%E4%B8%AD%E6%96%AD%EF%BC%89"><span class="toc-number">3.4.</span> <span class="toc-text">Step 4: 汇报工作（硬件中断）</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#Step-5-CPU-%E9%AA%8C%E6%94%B6%EF%BC%88%E5%A4%84%E7%90%86-Cache-%E5%B9%B6%E8%AF%BB%E5%8F%96%EF%BC%89"><span class="toc-number">3.5.</span> <span class="toc-text">Step 5: CPU 验收（处理 Cache 并读取）</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%9B%9B%E3%80%81DMA-remapping-%E4%B8%8E-IOMMU-%E7%9A%84%E5%BC%95%E5%85%A5"><span class="toc-number">4.</span> <span class="toc-text">四、DMA remapping 与 IOMMU 的引入</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%BB%80%E4%B9%88%E6%98%AF-DMA-Remapping%EF%BC%9F"><span class="toc-number">4.1.</span> <span class="toc-text">什么是 DMA Remapping？</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#DMA-Remapping-%E5%B8%A6%E6%9D%A5%E7%9A%84%E6%94%B6%E7%9B%8A"><span class="toc-number">4.2.</span> <span class="toc-text">DMA Remapping 带来的收益</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#1-%E5%AE%89%E5%85%A8%E9%9A%94%E7%A6%BB%EF%BC%88IOMMU-Protection%EF%BC%89"><span class="toc-number">4.2.1.</span> <span class="toc-text">1. 安全隔离（IOMMU Protection）</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#2-%E5%8C%96%E9%9B%B6%E4%B8%BA%E6%95%B4%EF%BC%8C%E6%B6%88%E7%81%AD%E5%86%85%E5%AD%98%E7%A2%8E%E7%89%87"><span class="toc-number">4.2.2.</span> <span class="toc-text">2. 化零为整，消灭内存碎片</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#3-%E6%8B%AF%E6%95%91-32-%E4%BD%8D%E8%80%81%E8%AE%BE%E5%A4%87"><span class="toc-number">4.2.3.</span> <span class="toc-text">3. 拯救 32 位老设备</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#4-%E4%BA%91%E8%AE%A1%E7%AE%97%E7%9A%84%E5%9F%BA%E7%9F%B3%EF%BC%9A%E7%A1%AC%E4%BB%B6%E7%9B%B4%E9%80%9A%EF%BC%88Passthrough%EF%BC%89"><span class="toc-number">4.2.4.</span> <span class="toc-text">4. 云计算的基石：硬件直通（Passthrough）</span></a></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%94%E3%80%81DMA-remapping-%E7%9A%84%E9%9A%94%E7%A6%BB%E6%9C%BA%E5%88%B6"><span class="toc-number">5.</span> <span class="toc-text">五、DMA remapping 的隔离机制</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%9C%BA%E5%88%B6%E4%B8%80%EF%BC%9A%E8%BA%AB%E4%BB%BD%E8%AF%86%E5%88%AB%EF%BC%88Source-ID-BDF%EF%BC%89%E2%80%94%E2%80%94-%E6%9F%A5%E2%80%9C%E5%8F%91%E4%BB%B6%E4%BA%BA%E2%80%9D"><span class="toc-number">5.1.</span> <span class="toc-text">机制一：身份识别（Source ID &#x2F; BDF）—— 查“发件人”</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%9C%BA%E5%88%B6%E4%BA%8C%EF%BC%9A%E4%B8%8A%E4%B8%8B%E6%96%87%E8%A1%A8%EF%BC%88Context-Table%EF%BC%89%E4%B8%8E%E4%BF%9D%E6%8A%A4%E5%9F%9F%EF%BC%88Domain%EF%BC%89%E2%80%94%E2%80%94-%E6%9F%A5%E2%80%9C%E4%B8%93%E5%B1%9E%E5%AD%97%E5%85%B8%E2%80%9D"><span class="toc-number">5.2.</span> <span class="toc-text">机制二：上下文表（Context Table）与保护域（Domain）—— 查“专属字典”</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%9C%BA%E5%88%B6%E4%B8%89%EF%BC%9AIOMMU-%E7%BB%84%EF%BC%88IOMMU-Group%EF%BC%89%E4%B8%8E-ACS-%E6%8A%80%E6%9C%AF-%E2%80%94%E2%80%94-%E5%A0%B5%E4%BD%8F%E2%80%9C%E6%8A%84%E8%BF%91%E9%81%93%E2%80%9D%E7%9A%84%E6%BC%8F%E6%B4%9E"><span class="toc-number">5.3.</span> <span class="toc-text">机制三：IOMMU 组（IOMMU Group）与 ACS 技术 —— 堵住“抄近道”的漏洞</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%BB%93%E8%AF%AD"><span class="toc-number">6.</span> <span class="toc-text">结语</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/04/15/vfio/" title="VFIO：userspace 设备直通与虚拟机访问">VFIO：userspace 设备直通与虚拟机访问</a><time datetime="2026-04-14T16:00:00.000Z" title="发表于 2026-04-15 00:00:00">2026-04-15</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/04/01/vring/" title="VRing 数据结构">VRing 数据结构</a><time datetime="2026-04-01T11:00:00.000Z" title="发表于 2026-04-01 19:00:00">2026-04-01</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/03/21/kata-class/" title="Kata runtime 关键组件分析">Kata runtime 关键组件分析</a><time datetime="2026-03-20T16:00:00.000Z" title="发表于 2026-03-21 00:00:00">2026-03-21</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/03/21/kata-runtime/" title="Kata runtime 启动流程">Kata runtime 启动流程</a><time datetime="2026-03-20T16:00:00.000Z" title="发表于 2026-03-21 00:00:00">2026-03-21</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/03/18/qemu-vcpu-start/" title="QEMU vCPU 线程启动全流程">QEMU vCPU 线程启动全流程</a><time datetime="2026-03-18T04:00:00.000Z" title="发表于 2026-03-18 12:00:00">2026-03-18</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By Han Zhang</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.1</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.4</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.4"></script><script src="/js/main.js?v=5.5.4"></script><div class="js-pjax"><script>(() => {
+  const parseViewBox = viewBox => {
+    if (!viewBox) return null
+    const parts = viewBox.trim().split(/[\s,]+/).map(n => Number(n))
+    if (parts.length !== 4 || parts.some(n => Number.isNaN(n))) return null
+    return parts
+  }
+
+  const getSvgViewBox = svg => {
+    const attr = parseViewBox(svg.getAttribute('viewBox'))
+    if (attr) return attr
+
+    // Fallback: use bbox to build a viewBox
+    try {
+      const bbox = svg.getBBox()
+      if (bbox && bbox.width && bbox.height) return [bbox.x, bbox.y, bbox.width, bbox.height]
+    } catch (e) {
+      // getBBox may fail on some edge cases; ignore
+    }
+
+    const w = Number(svg.getAttribute('width')) || 0
+    const h = Number(svg.getAttribute('height')) || 0
+    if (w > 0 && h > 0) return [0, 0, w, h]
+    return [0, 0, 100, 100]
+  }
+
+  const setSvgViewBox = (svg, vb) => {
+    svg.setAttribute('viewBox', `${vb[0]} ${vb[1]} ${vb[2]} ${vb[3]}`)
+  }
+
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
+
+  const openSvgInNewTab = ({ source, initViewBox }) => {
+    const getClonedSvg = () => {
+      if (typeof source === 'string') {
+        const template = document.createElement('template')
+        template.innerHTML = source.trim()
+        const svg = template.content.querySelector('svg')
+        return svg ? svg.cloneNode(true) : null
+      }
+      if (source && typeof source.cloneNode === 'function') {
+        return source.cloneNode(true)
+      }
+      return null
+    }
+
+    const clone = getClonedSvg()
+    if (!clone) return
+    if (initViewBox && initViewBox.length === 4) {
+      clone.setAttribute('viewBox', initViewBox.join(' '))
+    }
+    if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+    if (!clone.getAttribute('xmlns:xlink') && clone.outerHTML.includes('xlink:')) {
+      clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink')
+    }
+    // inject background to match current theme
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+    const bg = getComputedStyle(document.body).backgroundColor || (isDark ? '#1e1e1e' : '#ffffff')
+    if (!clone.style.background) clone.style.background = bg
+
+    const serializer = new XMLSerializer()
+    const svgSource = serializer.serializeToString(clone)
+    const htmlSource = `<!doctype html><html><head><meta charset="utf-8" />
+      <style>
+        html, body { width: 100%; height: 100%; margin: 0; display: flex; align-items: center; justify-content: center; background: ${bg}; }
+        svg { max-width: 100%; max-height: 100%; height: auto; width: auto; }
+      </style>
+      </head><body>${svgSource}</body></html>`
+    const blob = new Blob([htmlSource], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    window.open(url, '_blank', 'noopener')
+    setTimeout(() => URL.revokeObjectURL(url), 30000)
+  }
+
+  const attachMermaidViewerButton = wrap => {
+    let btn = wrap.querySelector('.mermaid-open-btn')
+    if (!btn) {
+      btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'mermaid-open-btn'
+      wrap.appendChild(btn)
+    }
+
+    btn.innerHTML = '<i class="fa fa-search fa-fw" aria-hidden="true"></i>'
+
+    if (!btn.__mermaidViewerBound) {
+      btn.addEventListener('click', e => {
+        e.preventDefault()
+        e.stopPropagation()
+        const svg = wrap.__mermaidOriginalSvg || wrap.querySelector('svg')
+        if (!svg) return
+        const initViewBox = wrap.__mermaidInitViewBox
+        if (typeof svg === 'string') {
+          openSvgInNewTab({ source: svg, initViewBox })
+          return
+        }
+        openSvgInNewTab({ source: svg, initViewBox })
+      })
+      btn.__mermaidViewerBound = true
+    }
+  }
+
+  // Zoom around a point (px, py) in the SVG viewport (in viewBox coordinates)
+  const zoomAtPoint = (vb, factor, px, py) => {
+    const w = vb[2] * factor
+    const h = vb[3] * factor
+    const nx = px - (px - vb[0]) * factor
+    const ny = py - (py - vb[1]) * factor
+    return [nx, ny, w, h]
+  }
+
+  const initMermaidGestures = wrap => {
+    const svg = wrap.querySelector('svg')
+    if (!svg) return
+
+    // Ensure viewBox exists so gestures always work
+    const initVb = getSvgViewBox(svg)
+    wrap.__mermaidInitViewBox = initVb
+    wrap.__mermaidCurViewBox = initVb.slice()
+    setSvgViewBox(svg, initVb)
+
+    // Avoid binding multiple times on themeChange/pjax
+    if (wrap.__mermaidGestureBound) return
+    wrap.__mermaidGestureBound = true
+
+    // Helper: map client (viewport) coordinate -> viewBox coordinate
+    const clientToViewBox = (clientX, clientY) => {
+      const rect = svg.getBoundingClientRect()
+      const vb = wrap.__mermaidCurViewBox || getSvgViewBox(svg)
+      const x = vb[0] + (clientX - rect.left) * (vb[2] / rect.width)
+      const y = vb[1] + (clientY - rect.top) * (vb[3] / rect.height)
+      return { x, y, rect, vb }
+    }
+
+    const state = {
+      pointers: new Map(),
+      startVb: null,
+      startDist: 0,
+      startCenter: null
+    }
+
+    const clampVb = vb => {
+      const init = wrap.__mermaidInitViewBox || vb
+      const minW = init[2] * 0.1
+      const maxW = init[2] * 10
+      const minH = init[3] * 0.1
+      const maxH = init[3] * 10
+      vb[2] = clamp(vb[2], minW, maxW)
+      vb[3] = clamp(vb[3], minH, maxH)
+      return vb
+    }
+
+    const setCurVb = vb => {
+      vb = clampVb(vb)
+      wrap.__mermaidCurViewBox = vb
+      setSvgViewBox(svg, vb)
+    }
+
+    const onPointerDown = e => {
+      // Allow only primary button for mouse
+      if (e.pointerType === 'mouse' && e.button !== 0) return
+      svg.setPointerCapture(e.pointerId)
+      state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+      if (state.pointers.size === 1) {
+        state.startVb = (wrap.__mermaidCurViewBox || getSvgViewBox(svg)).slice()
+      } else if (state.pointers.size === 2) {
+        const pts = [...state.pointers.values()]
+        const dx = pts[0].x - pts[1].x
+        const dy = pts[0].y - pts[1].y
+        state.startDist = Math.hypot(dx, dy)
+        state.startVb = (wrap.__mermaidCurViewBox || getSvgViewBox(svg)).slice()
+        state.startCenter = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 }
+      }
+    }
+
+    const onPointerMove = e => {
+      if (!state.pointers.has(e.pointerId)) return
+      state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+      // Pan with 1 pointer
+      if (state.pointers.size === 1 && state.startVb) {
+        const p = [...state.pointers.values()][0]
+        const prev = { x: e.clientX - e.movementX, y: e.clientY - e.movementY }
+        // movementX/Y unreliable on touch, compute from stored last position
+        const last = wrap.__mermaidLastSinglePointer || p
+        const dxClient = p.x - last.x
+        const dyClient = p.y - last.y
+        wrap.__mermaidLastSinglePointer = p
+
+        const { rect } = clientToViewBox(p.x, p.y)
+        const vb = (wrap.__mermaidCurViewBox || getSvgViewBox(svg)).slice()
+        const dx = dxClient * (vb[2] / rect.width)
+        const dy = dyClient * (vb[3] / rect.height)
+        setCurVb([vb[0] - dx, vb[1] - dy, vb[2], vb[3]])
+        return
+      }
+
+      // Pinch zoom with 2 pointers
+      if (state.pointers.size === 2 && state.startVb && state.startDist > 0) {
+        const pts = [...state.pointers.values()]
+        const dx = pts[0].x - pts[1].x
+        const dy = pts[0].y - pts[1].y
+        const dist = Math.hypot(dx, dy)
+        if (!dist) return
+        const factor = state.startDist / dist // dist bigger => zoom in (viewBox smaller)
+
+        const cx = (pts[0].x + pts[1].x) / 2
+        const cy = (pts[0].y + pts[1].y) / 2
+        const centerClient = { x: cx, y: cy }
+
+        const pxy = clientToViewBox(centerClient.x, centerClient.y)
+        const cpx = pxy.x
+        const cpy = pxy.y
+
+        const vb = zoomAtPoint(state.startVb, factor, cpx, cpy)
+        setCurVb(vb)
+      }
+    }
+
+    const onPointerUpOrCancel = e => {
+      state.pointers.delete(e.pointerId)
+      if (state.pointers.size === 0) {
+        state.startVb = null
+        state.startDist = 0
+        state.startCenter = null
+        wrap.__mermaidLastSinglePointer = null
+      } else if (state.pointers.size === 1) {
+        // reset single pointer baseline to avoid jump
+        wrap.__mermaidLastSinglePointer = [...state.pointers.values()][0]
+      }
+    }
+
+    // Wheel zoom (mouse/trackpad)
+    const onWheel = e => {
+      // ctrlKey on mac trackpad pinch; we treat both as zoom
+      e.preventDefault()
+      const delta = e.deltaY
+      const zoomFactor = delta > 0 ? 1.1 : 0.9
+      const { x, y } = clientToViewBox(e.clientX, e.clientY)
+      const vb = (wrap.__mermaidCurViewBox || getSvgViewBox(svg)).slice()
+      setCurVb(zoomAtPoint(vb, zoomFactor, x, y))
+    }
+
+    const onDblClick = () => {
+      const init = wrap.__mermaidInitViewBox
+      if (!init) return
+      wrap.__mermaidCurViewBox = init.slice()
+      setSvgViewBox(svg, init)
+    }
+
+    svg.addEventListener('pointerdown', onPointerDown)
+    svg.addEventListener('pointermove', onPointerMove)
+    svg.addEventListener('pointerup', onPointerUpOrCancel)
+    svg.addEventListener('pointercancel', onPointerUpOrCancel)
+    svg.addEventListener('wheel', onWheel, { passive: false })
+    svg.addEventListener('dblclick', onDblClick)
+  }
+
+  const runMermaid = ele => {
+    window.loadMermaid = true
+    const theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default'
+
+    ele.forEach((item, index) => {
+      const mermaidSrc = item.firstElementChild
+
+      // Clear old render (themeChange/pjax will rerun)
+      const oldSvg = item.querySelector('svg')
+      if (oldSvg) oldSvg.remove()
+      item.__mermaidGestureBound = false
+
+      const config = mermaidSrc.dataset.config ? JSON.parse(mermaidSrc.dataset.config) : {}
+      if (!config.theme) {
+        config.theme = theme
+      }
+      const mermaidThemeConfig = `%%{init: ${JSON.stringify(config)}}%%\n`
+      const mermaidID = `mermaid-${index}`
+      const mermaidDefinition = mermaidThemeConfig + mermaidSrc.textContent
+
+      const renderFn = mermaid.render(mermaidID, mermaidDefinition)
+      const renderMermaid = svg => {
+        mermaidSrc.insertAdjacentHTML('afterend', svg)
+        if (true) initMermaidGestures(item)
+        item.__mermaidOriginalSvg = svg
+        if (true) attachMermaidViewerButton(item)
+      }
+
+
+      // mermaid v9 and v10 compatibility
+      typeof renderFn === 'string' ? renderMermaid(renderFn) : renderFn.then(({ svg }) => renderMermaid(svg))
+    })
+  }
+
+  const codeToMermaid = () => {
+    const codeMermaidEle = document.querySelectorAll('pre > code.mermaid')
+    if (codeMermaidEle.length === 0) return
+
+    codeMermaidEle.forEach(ele => {
+      const preEle = document.createElement('pre')
+      preEle.className = 'mermaid-src'
+      preEle.hidden = true
+      preEle.textContent = ele.textContent
+      const newEle = document.createElement('div')
+      newEle.className = 'mermaid-wrap'
+      newEle.appendChild(preEle)
+      ele.parentNode.replaceWith(newEle)
+    })
+  }
+
+  const loadMermaid = () => {
+    if (true) codeToMermaid()
+    const $mermaid = document.querySelectorAll('#article-container .mermaid-wrap')
+    if ($mermaid.length === 0) return
+
+    const runMermaidFn = () => runMermaid($mermaid)
+    btf.addGlobalFn('themeChange', runMermaidFn, 'mermaid')
+    window.loadMermaid ? runMermaidFn() : btf.getScript('https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.min.js').then(runMermaidFn)
+  }
+
+  btf.addGlobalFn('encrypt', loadMermaid, 'mermaid')
+  window.pjax ? loadMermaid() : document.addEventListener('DOMContentLoaded', loadMermaid)
+})()</script></div><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>
