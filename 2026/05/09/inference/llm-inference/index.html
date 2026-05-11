@@ -1,0 +1,942 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>LLM 推理的基础框架知识 | Han</title><meta name="author" content="Han Zhang"><meta name="copyright" content="Han Zhang"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="一、基本概念 LLM 推理的核心流程可以概括为：  Tokenizer：文本 → token ID（数字） Embedding：token ID → 词表上的 logits，logits 是一个向量，表示每个 token 在每个维度上的权重 生成（Generation）：不断产生下一个 token ID，再 decode 回文   如下图所示，其中 Generation（生成）部分的核心是Tran">
+<meta property="og:type" content="article">
+<meta property="og:title" content="LLM 推理的基础框架知识">
+<meta property="og:url" content="https://ihanzh.github.io/2026/05/09/inference/llm-inference/index.html">
+<meta property="og:site_name" content="Han">
+<meta property="og:description" content="一、基本概念 LLM 推理的核心流程可以概括为：  Tokenizer：文本 → token ID（数字） Embedding：token ID → 词表上的 logits，logits 是一个向量，表示每个 token 在每个维度上的权重 生成（Generation）：不断产生下一个 token ID，再 decode 回文   如下图所示，其中 Generation（生成）部分的核心是Tran">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://ihanzh.github.io/img/avatar.jpg">
+<meta property="article:published_time" content="2026-05-09T01:00:00.000Z">
+<meta property="article:modified_time" content="2026-05-11T14:30:27.712Z">
+<meta property="article:author" content="Han Zhang">
+<meta property="article:tag" content="LLM">
+<meta property="article:tag" content="inference">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://ihanzh.github.io/img/avatar.jpg"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "LLM 推理的基础框架知识",
+  "url": "https://ihanzh.github.io/2026/05/09/inference/llm-inference/",
+  "image": "https://ihanzh.github.io/img/avatar.jpg",
+  "datePublished": "2026-05-09T01:00:00.000Z",
+  "dateModified": "2026-05-11T14:30:27.712Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "Han Zhang",
+      "url": "https://ihanzh.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon.png"><link rel="canonical" href="https://ihanzh.github.io/2026/05/09/inference/llm-inference/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.5.4"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.1.0/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"prismjs","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'LLM 推理的基础框架知识',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><meta name="generator" content="Hexo 8.1.1"></head><body><div class="bg-animation" id="web_bg" style="background-image: url(/img/background.jpg);"></div><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.jpg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">19</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">30</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">8</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><span> Tags</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><span> Categories</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/top.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Han</span></a><a class="nav-page-title" href="/"><span class="site-name">LLM 推理的基础框架知识</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><span> Tags</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><span> Categories</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">LLM 推理的基础框架知识</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-05-09T01:00:00.000Z" title="发表于 2026-05-09 09:00:00">2026-05-09</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-05-11T14:30:27.712Z" title="更新于 2026-05-11 22:30:27">2026-05-11</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/LLM/">LLM</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><h2 id="一、基本概念">一、基本概念</h2>
+<p>LLM 推理的核心流程可以概括为：</p>
+<ul>
+<li><strong>Tokenizer</strong>：文本 → token ID（数字）</li>
+<li><strong>Embedding</strong>：token ID → 词表上的 logits，logits 是一个向量，表示每个 token 在每个维度上的权重</li>
+<li><strong>生成（Generation）</strong>：不断产生下一个 token ID，再 decode 回文</li>
+</ul>
+<p><img src="../../images/llm-inference/1778287855613.png" alt="alt text"></p>
+<p>如下图所示，其中 Generation（生成）部分的核心是<strong>Transformer 的 Decoder</strong>，其由多个 decoder layer 组成，每个 decoder layer 又包含了 Attention 和 MLP 两大块：</p>
+<ul>
+<li>
+<p>其中 Attention（注意力机制）部分的核心是<strong>QKV（Query-Key-Value）</strong>，它是 Transformer 的灵魂所在，负责捕捉输入文本中不同 token 之间的关系和依赖。</p>
+</li>
+<li>
+<p>MLP（多层感知机）部分则负责对 Attention 输出的结果进行非线性变换，增强模型的表达能力。</p>
+</li>
+</ul>
+<p>并且这两块的输入都需要经过 LayerNorm（归一化）处理，结果也会通过残差连接（Residual Connection）与输入相加，保证信息的流动和梯度的稳定。</p>
+<p><img src="../../images/llm-inference/1778288642646.png" alt="alt text"></p>
+<pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token keyword">class</span> <span class="token class-name">Qwen3Model</span><span class="token punctuation">(</span>nn<span class="token punctuation">.</span>Module<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">def</span> <span class="token function">__init__</span><span class="token punctuation">(</span>self<span class="token punctuation">,</span> config<span class="token punctuation">)</span><span class="token punctuation">:</span>
+        <span class="token builtin">super</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span>__init__<span class="token punctuation">(</span><span class="token punctuation">)</span>
+        self<span class="token punctuation">.</span>embed_tokens <span class="token operator">=</span> nn<span class="token punctuation">.</span>Embedding<span class="token punctuation">(</span>config<span class="token punctuation">.</span>vocab_size<span class="token punctuation">,</span> config<span class="token punctuation">.</span>hidden_size<span class="token punctuation">)</span>
+        self<span class="token punctuation">.</span>layers <span class="token operator">=</span> nn<span class="token punctuation">.</span>ModuleList<span class="token punctuation">(</span><span class="token punctuation">[</span>Qwen3DecoderLayer<span class="token punctuation">(</span>config<span class="token punctuation">,</span> i<span class="token punctuation">)</span> <span class="token keyword">for</span> i <span class="token keyword">in</span> <span class="token builtin">range</span><span class="token punctuation">(</span>config<span class="token punctuation">.</span>num_hidden_layers<span class="token punctuation">)</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+        self<span class="token punctuation">.</span>norm <span class="token operator">=</span> RMSNorm<span class="token punctuation">(</span>config<span class="token punctuation">.</span>hidden_size<span class="token punctuation">,</span> config<span class="token punctuation">.</span>rms_norm_eps<span class="token punctuation">)</span>
+        self<span class="token punctuation">.</span>rotary_emb <span class="token operator">=</span> RotaryEmbedding<span class="token punctuation">(</span>config<span class="token punctuation">.</span>head_dim<span class="token punctuation">)</span>
+
+    <span class="token keyword">def</span> <span class="token function">forward</span><span class="token punctuation">(</span>self<span class="token punctuation">,</span> input_ids<span class="token punctuation">:</span> torch<span class="token punctuation">.</span>Tensor<span class="token punctuation">)</span> <span class="token operator">-</span><span class="token operator">></span> torch<span class="token punctuation">.</span>Tensor<span class="token punctuation">:</span>
+        B<span class="token punctuation">,</span> S <span class="token operator">=</span> input_ids<span class="token punctuation">.</span>shape
+        <span class="token comment"># 查表操作，得到每个 token 的初始表示。</span>
+        <span class="token comment"># (batch, seq_len, 1) -> (batch, seq_len, hidden_size)</span>
+        hidden_states <span class="token operator">=</span> self<span class="token punctuation">.</span>embed_tokens<span class="token punctuation">(</span>input_ids<span class="token punctuation">)</span>
+
+        <span class="token comment"># 计算位置编码，并在每层 Attention 中使用</span>
+        <span class="token comment"># torch.arange(S) 生成位置索引 [0, 1, 2, ..., seq_len-1]</span>
+        <span class="token comment"># unsqueeze(0) 使其成为 (1, seq_len)，</span>
+        <span class="token comment"># expand(B, -1) 把第 0 维复制 B 份，-1 表示该维保持不变 (B, seq_len)</span>
+        <span class="token comment"># 得到的 position_ids 形状为 (batch, seq_len)，每行都是 [0, 1, 2, ..., seq_len-1]</span>
+        position_ids <span class="token operator">=</span> torch<span class="token punctuation">.</span>arange<span class="token punctuation">(</span>S<span class="token punctuation">,</span> device<span class="token operator">=</span>input_ids<span class="token punctuation">.</span>device<span class="token punctuation">)</span><span class="token punctuation">.</span>unsqueeze<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">.</span>expand<span class="token punctuation">(</span>B<span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">)</span>
+
+        <span class="token comment"># 计算 RoPE 位置编码 [cos, sin]</span>
+        <span class="token comment"># 每个的形状为 (1, seq_len, head_dim)</span>
+        position_embeddings <span class="token operator">=</span> self<span class="token punctuation">.</span>rotary_emb<span class="token punctuation">(</span>position_ids<span class="token punctuation">)</span>
+
+        <span class="token comment"># 构建因果掩码，确保每个位置只能看到它之前的位置</span>
+        <span class="token comment"># torch.full((S, S), float("-inf")) 创建一个 SxS 的矩阵，初始值为 -inf</span>
+        <span class="token comment"># torch.triu(..., diagonal=1) 将矩阵的上三角部分（不包括对角线）保留，其他部分设为 0</span>
+        <span class="token comment"># unsqueeze(0).unsqueeze(0) 将矩阵扩展为 (1, 1, S, S)，以便在 Attention 中广播使用</span>
+        causal_mask <span class="token operator">=</span> torch<span class="token punctuation">.</span>full<span class="token punctuation">(</span><span class="token punctuation">(</span>S<span class="token punctuation">,</span> S<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token builtin">float</span><span class="token punctuation">(</span><span class="token string">"-inf"</span><span class="token punctuation">)</span><span class="token punctuation">,</span> device<span class="token operator">=</span>input_ids<span class="token punctuation">.</span>device<span class="token punctuation">,</span> dtype<span class="token operator">=</span>hidden_states<span class="token punctuation">.</span>dtype<span class="token punctuation">)</span>
+        causal_mask <span class="token operator">=</span> torch<span class="token punctuation">.</span>triu<span class="token punctuation">(</span>causal_mask<span class="token punctuation">,</span> diagonal<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">)</span>
+        causal_mask <span class="token operator">=</span> causal_mask<span class="token punctuation">.</span>unsqueeze<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">.</span>unsqueeze<span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span>
+
+        <span class="token comment"># 依次通过每层 decoder layer，进行 Attention 和 MLP 计算</span>
+        <span class="token keyword">for</span> layer <span class="token keyword">in</span> self<span class="token punctuation">.</span>layers<span class="token punctuation">:</span>
+            hidden_states <span class="token operator">=</span> layer<span class="token punctuation">(</span>hidden_states<span class="token punctuation">,</span> causal_mask<span class="token punctuation">,</span> position_embeddings<span class="token punctuation">)</span>
+
+        <span class="token comment"># 最后再经过一层 RMSNorm 归一化，得到最终的输出表示</span>
+        <span class="token keyword">return</span> self<span class="token punctuation">.</span>norm<span class="token punctuation">(</span>hidden_states<span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<h2 id="二、Tokenizer">二、Tokenizer</h2>
+<p>如下图所示：Tokenizer 的作用是将输入的文本转换为模型可以理解的 token ID</p>
+<p><img src="../../images/llm-inference/tokenizer.png" alt="alt text"></p>
+<ul>
+<li><strong><code>encode</code>（编码）</strong>：把文字切成 token，并转换成对应的 ID 数字（给模型吃）。</li>
+<li><strong><code>decode</code>（解码）</strong>：把模型吐出来的 token ID 数字，还原成人类能看懂的文字。</li>
+</ul>
+<p><a href="./tokenizer.md">详细的 Tokenizer 实现方案介绍请看这里</a></p>
+<h2 id="三、Embedding">三、Embedding</h2>
+<p>将“数字 ID <code>(batch, n, 1)</code>”变成“浮点数张量 <code>(batch, n, size)</code>”</p>
+<p>主流方案：查询预训练好的<strong>词表向量</strong>（Embedding Table）</p>
+<ul>
+<li><strong>行数</strong>：对应词表的大小（比如 100,277 行）。</li>
+<li><strong>列数</strong>：对应每个 Token 的维度大小（比如 4096 列）。</li>
+<li><strong>怎么做</strong>：当 Tokenizer 吐出一个 ID（比如 <code>855</code>），模型就直接去这个表格里把第 855 行的那 4096 个浮点数“抽”出来。</li>
+<li><em>注意</em>：表格里的这些浮点数不是瞎写的，而是在模型预训练时，随着海量数据一点点**学习（更新）**出来的。相似的词，在多维空间里的距离会自动变得接近。</li>
+</ul>
+<p>它呈现出三个非常神奇的魔法现象：</p>
+<p><strong>1. 意思相近的词，靠在了一起</strong></p>
+<p>当你把“苹果”、“香蕉”、“梨”这几行向量抽出来计算它们的距离（余弦相似度）时，你会发现它们在 4096 维的空间里紧紧挨在一起；而它们离“挖掘机”的距离十万八千里。因为模型在千亿次训练中发现，这几个词总是出现在相似的上下文里（都能被吃、被买、被削），所以它们的向量被自动拉近了。</p>
+<p><strong>2. 关系构成了平行线</strong></p>
+<p>最著名的例子是，在这个表格里：<br>
+<strong>向量(国王) - 向量(男人) + 向量(女人) ≈ 向量(女王)</strong><br>
+同样地：<br>
+<strong>向量(北京) - 向量(中国) + 向量(法国) ≈ 向量(巴黎)</strong><br>
+因为模型在阅读海量文章时，自动把“性别”、“首都”这种极其抽象的逻辑，编码成了浮点数之间精确的方向和距离。</p>
+<p><strong>3. 语法也变成了数字</strong></p>
+<p>词表里的 <code>walk</code>、<code>walks</code>、<code>walking</code> 之间的相对距离和方向，与 <code>run</code>、<code>runs</code>、<code>running</code> 之间的相对距离和方向几乎是一模一样的。它把英语的时态规则，硬生生地变成了多维几何图形！</p>
+<h2 id="四、Normalization（归一化）">四、Normalization（归一化）</h2>
+<p>神经网络每一层的输出分布会随着训练不断变化（Internal Covariate Shift），这会导致：</p>
+<ul>
+<li>后续层需要不断适应新的输入分布</li>
+<li>训练不稳定，需要更小的学习率</li>
+<li>收敛速度变慢</li>
+</ul>
+<p>归一化的目标：<strong>将每一层的输出&quot;拉回&quot;到稳定的分布</strong>（均值≈0，方差≈1）。</p>
+<p>具体的数学解释和不同归一化方法的介绍，请看<a href="./normalization.md">这里</a>。</p>
+<h2 id="五、注意力机制">五、注意力机制</h2>
+<h3 id="Linear-层基础：矩阵乘法">Linear 层基础：矩阵乘法</h3>
+<p>在深入 Q/K/V 之前，先理解 <strong>Linear 层</strong>（也叫全连接层、Dense 层）的本质。</p>
+<p><strong>数学定义</strong>：</p>
+<p>$$<br>
+y = xW^T + b<br>
+$$</p>
+<p>其中：</p>
+<ul>
+<li>$x$：输入向量，形状 <code>(*, in_features)</code></li>
+<li>$W$：权重矩阵，形状 <code>(out_features, in_features)</code></li>
+<li>$b$：偏置向量，形状 <code>(out_features)</code>（可选）</li>
+<li>$y$：输出向量，形状 <code>(*, out_features)</code></li>
+</ul>
+<p><strong>矩阵乘法图解</strong>：</p>
+<pre class="line-numbers language-none"><code class="language-none">输入 x              权重 W^T              输出 y
+(1, in_features)   (in_features, out)   (1, out_features)
+
+[x₀ x₁ x₂ x₃]  ×  [w₀₀ w₀₁ w₀₂]  &#x3D;  [y₀ y₁ y₂]
+                  [w₁₀ w₁₁ w₁₂]
+                  [w₂₀ w₂₁ w₂₂]
+                  [w₃₀ w₃₁ w₃₂]
+
+每个输出元素:
+y₀ &#x3D; x₀·w₀₀ + x₁·w₁₀ + x₂·w₂₀ + x₃·w₃₀  (输入与第 0 列点积)
+y₁ &#x3D; x₀·w₀₁ + x₁·w₁₁ + x₂·w₂₁ + x₃·w₃₁  (输入与第 1 列点积)
+y₂ &#x3D; x₀·w₀₂ + x₁·w₁₂ + x₂·w₂₂ + x₃·w₃₂  (输入与第 2 列点积)<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p><strong>关键理解</strong>：</p>
+<p>本质上，Linear 层就是<strong>对输入向量进行旋转、缩放、投影</strong>的操作。即将输入空间映射到一个新的输出空间。并且空间的维度由权重矩阵的形状决定。</p>
+<table>
+<thead>
+<tr>
+<th>概念</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>线性变换</strong></td>
+<td>Linear 层本质是对输入做线性变换（旋转、缩放、投影）</td>
+</tr>
+<tr>
+<td><strong>参数量</strong></td>
+<td><code>in_features × out_features</code>（+ out_features 如果有 bias）</td>
+</tr>
+<tr>
+<td><strong>无激活函数</strong></td>
+<td>Linear 本身不含非线性，需配合 ReLU/SiLU 等使用</td>
+</tr>
+<tr>
+<td><strong>批量处理</strong></td>
+<td>对 batch 和 seq_len 维度独立作用，只变换最后一维</td>
+</tr>
+</tbody>
+</table>
+<p>Attention 的核心是 Query、Key、Value 三个向量。它们通过<strong>线性投影</strong>从输入 hidden states 生成。</p>
+<pre class="line-numbers language-none"><code class="language-none">Hidden States (batch, seq_len, hidden_size)
+        │
+        ├──► Wq ──► Q (Query)   : &quot;我在找什么&quot;
+        │
+        ├──► Wk ──► K (Key)     : &quot;我有什么&quot;
+        │
+        └──► Wv ──► V (Value)   : &quot;我的内容是什么&quot;<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<h3 id="Attention：注意力机制">Attention：注意力机制</h3>
+<p><strong>核心公式</strong>：</p>
+<p>$$<br>
+\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right) V<br>
+$$</p>
+<p>其中：</p>
+<ul>
+<li>$Q$（Query）：查询矩阵，表示&quot;我在找什么&quot;</li>
+<li>$K$（Key）：键矩阵，表示&quot;我有什么&quot;</li>
+<li>$V$（Value）：值矩阵，表示&quot;我的内容是什么&quot;</li>
+<li>$d_k$：Key 向量的维度（用于缩放）</li>
+</ul>
+<img src="../../images/llm-inference/1778296334537.png" alt="Attention 机制示意图" width="60%">
+<p>传统的序列模型（如 RNN）有一个根本问题：<strong>信息瓶颈</strong>。</p>
+<pre class="line-numbers language-none"><code class="language-none">RNN: 所有历史信息必须压缩到固定大小的隐藏状态
+      序列很长时，早期信息会被&quot;遗忘&quot;
+
+Attention: 每个位置可以直接访问任意其他位置
+           没有信息压缩损失<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p><strong>Attention 的核心思想</strong>：对于每个查询（Query），在所有键值对（Key-Value）中找到相关的内容，然后加权汇总。</p>
+<p>详细的 Attention 计算流程请看<a href="./attention.md">这里</a>。</p>
+<p><strong>不同层的 Attention 模式</strong>：</p>
+<ul>
+<li><strong>浅层</strong>：通常关注局部上下文、语法结构</li>
+<li><strong>深层</strong>：捕捉语义关系、长距离依赖</li>
+<li><strong>某些头</strong>：专门关注&quot;前一个词&quot;或&quot;标点&quot;</li>
+<li><strong>某些头</strong>：专门关注&quot;主谓关系&quot;或&quot;指代&quot;</li>
+</ul>
+<h4 id="复杂度分析">复杂度分析</h4>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>复杂度</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Q·K^T</td>
+<td>O(n² · d)</td>
+<td>n=序列长度，d=head_dim</td>
+</tr>
+<tr>
+<td>Softmax</td>
+<td>O(n²)</td>
+<td>每行 n 个元素</td>
+</tr>
+<tr>
+<td>Weights·V</td>
+<td>O(n² · d)</td>
+<td>矩阵乘法</td>
+</tr>
+<tr>
+<td><strong>总计</strong></td>
+<td><strong>O(n² · d)</strong></td>
+<td>这是长上下文的主要瓶颈</td>
+</tr>
+</tbody>
+</table>
+<p><strong>为什么 O(n²) 是问题</strong>：</p>
+<pre class="line-numbers language-none"><code class="language-none">n &#x3D; 1K   → n² &#x3D; 1M 次操作    ← 可接受
+n &#x3D; 4K   → n² &#x3D; 16M 次操作   ← 开始变慢
+n &#x3D; 32K  → n² &#x3D; 1B 次操作    ← 很慢
+n &#x3D; 128K → n² &#x3D; 16B 次操作   ← 非常慢，显存爆炸<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+<p><strong>Flash Attention 等优化</strong>：通过巧妙的分块计算，在保持 O(n²) 计算量的同时，大幅减少<strong>显存占用</strong>（从 O(n²) 降到 O(n)）。</p>
+<h3 id="位置编码">位置编码</h3>
+<p>Transformer 的核心操作（矩阵乘法）本身是<strong>位置无关</strong>的——打乱输入顺序，输出也只是相应打乱。为了让模型理解&quot;谁在前、谁在后&quot;，我们需要注入位置信息。</p>
+<p><strong>位置编码的演进</strong>：</p>
+<pre class="line-numbers language-none"><code class="language-none">绝对位置编码 (GPT-1&#x2F;2)     →  学习固定位置向量，直接加到 embedding
+正弦位置编码 (Transformer)  →  用 sin&#x2F;cos 生成位置向量，加到 embedding
+相对位置编码 (T5, ALiBi)    →  在 attention 分数上加偏置
+RoPE (Llama, Qwen, ...)    →  旋转 Q 和 K 向量 ← 现代主流<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+<p>主流的 RoPE 的详细介绍请看<a href="./rope.md">这里</a>。</p>
+<h3 id="概率归一化：Softmax-函数">概率归一化：Softmax 函数</h3>
+<p>Softmax 函数将任意实数向量转换为<strong>概率分布</strong>（所有元素非负且和为 1）。</p>
+<p><strong>数学定义</strong>：</p>
+<p>对于输入向量 $z = [z_1, z_2, …, z_n]$：</p>
+<p>$$<br>
+\text{softmax}(z_i) = \frac{e^{z_i}}{\sum_{j=1}^{n} e^{z_j}}<br>
+$$</p>
+<p><strong>直观理解</strong>：</p>
+<pre class="line-numbers language-none"><code class="language-none">输入 scores:  [2.0,  1.0,  0.1]
+              ↓ 取指数 e^x
+指数化:       [7.39, 2.72, 1.11]
+              ↓ 除以总和 (7.39+2.72+1.11&#x3D;11.22)
+概率分布:     [0.66, 0.24, 0.10]  ← 和为 1.0<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p><strong>核心性质</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>性质</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>归一化</strong></td>
+<td>输出和为 1，可解释为概率</td>
+</tr>
+<tr>
+<td><strong>保序</strong></td>
+<td>输入越大，输出概率越高</td>
+</tr>
+<tr>
+<td><strong>可微分</strong></td>
+<td>梯度友好，适合反向传播</td>
+</tr>
+<tr>
+<td><strong>放大差异</strong></td>
+<td>指数函数放大大值、抑制小值</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Softmax 的&quot;温度&quot;效应</strong>：</p>
+<pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token comment"># 温度参数控制分布的"尖锐程度"</span>
+<span class="token keyword">def</span> <span class="token function">softmax_with_temperature</span><span class="token punctuation">(</span>x<span class="token punctuation">,</span> temperature<span class="token operator">=</span><span class="token number">1.0</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">return</span> F<span class="token punctuation">.</span>softmax<span class="token punctuation">(</span>x <span class="token operator">/</span> temperature<span class="token punctuation">,</span> dim<span class="token operator">=</span><span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">)</span>
+
+<span class="token comment"># 示例：x = [2.0, 1.0, 0.0]</span>
+<span class="token comment"># T=1.0 (默认):  [0.67, 0.24, 0.09]  ← 正常分布</span>
+<span class="token comment"># T=0.5 (低温):  [0.84, 0.11, 0.04]  ← 更尖锐，接近 argmax</span>
+<span class="token comment"># T=2.0 (高温):  [0.51, 0.31, 0.19]  ← 更平滑，接近均匀分布</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p><strong>数值稳定性问题</strong>：</p>
+<p>直接计算 $e^{z_i}$ 可能导致数值溢出（当 $z_i$ 很大时）。实际实现会减去最大值：</p>
+<pre class="line-numbers language-python" data-language="python"><code class="language-python"><span class="token keyword">def</span> <span class="token function">stable_softmax</span><span class="token punctuation">(</span>x<span class="token punctuation">,</span> dim<span class="token operator">=</span><span class="token operator">-</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token comment"># 减去最大值，防止 exp 溢出</span>
+    x_max <span class="token operator">=</span> x<span class="token punctuation">.</span><span class="token builtin">max</span><span class="token punctuation">(</span>dim<span class="token operator">=</span>dim<span class="token punctuation">,</span> keepdim<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span><span class="token punctuation">.</span>values
+    exp_x <span class="token operator">=</span> torch<span class="token punctuation">.</span>exp<span class="token punctuation">(</span>x <span class="token operator">-</span> x_max<span class="token punctuation">)</span>
+    <span class="token keyword">return</span> exp_x <span class="token operator">/</span> exp_x<span class="token punctuation">.</span><span class="token builtin">sum</span><span class="token punctuation">(</span>dim<span class="token operator">=</span>dim<span class="token punctuation">,</span> keepdim<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span><span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p><strong>为什么这样做是安全的</strong>：</p>
+<p>$$<br>
+\frac{e^{z_i}}{\sum_j e^{z_j}} = \frac{e^{z_i - c}}{\sum_j e^{z_j - c}}<br>
+$$</p>
+<p>减去常数 $c = \max(z)$ 后，最大的指数变成 $e^0 = 1$，其他都是小于 1 的正数，避免了溢出。</p>
+<h4 id="Softmax-在-Attention-中的作用">Softmax 在 Attention 中的作用</h4>
+<p>在 Attention 中，Softmax 将<strong>注意力分数（scores）<strong>转换为</strong>注意力权重（weights）</strong>：</p>
+<pre class="line-numbers language-none"><code class="language-none">Q·K^T 分数:     [2.1,  -0.5,  1.3,  0.8]
+              ↓ softmax
+注意力权重:     [0.42,  0.03,  0.29,  0.26]  ← 概率分布
+              │
+              ▼ 加权求和 V
+输出:          weighted sum of V vectors<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>这意味着：</p>
+<ul>
+<li><strong>高分位置</strong>：模型&quot;注意&quot;这些位置，给予更高权重</li>
+<li><strong>低分位置</strong>：被&quot;忽略&quot;，权重接近 0</li>
+<li><strong>权重和为 1</strong>：输出是 V 的凸组合</li>
+</ul>
+<hr>
+<h2 id="六、MLP（多层感知机）">六、MLP（多层感知机）</h2>
+<p>在讲 MLP 之前，我们需要理解<strong>激活函数</strong>——它是神经网络表达能力的关键。</p>
+<p>如果没有激活函数，神经网络无论多少层，本质上都是<strong>线性变换</strong>：</p>
+<pre class="line-numbers language-none"><code class="language-none">线性层1: y₁ &#x3D; W₁x + b₁
+线性层2: y₂ &#x3D; W₂y₁ + b₂ &#x3D; W₂(W₁x + b₁) + b₂ &#x3D; (W₂W₁)x + (W₂b₁ + b₂)
+                                                ↑           ↑
+                                           等效单层权重   等效偏置<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+<p><strong>多层线性网络 = 单层线性网络</strong>！无法学习复杂的非线性模式。</p>
+<p>激活函数在每层之间引入<strong>非线性</strong>，使网络能够逼近任意复杂的函数。</p>
+<p>常见激活函数可以参考<a href="./activation.md">这里</a>。</p>
+<p>而 MLP（多层感知机）就是在 Attention 之后的一个<strong>全连接网络</strong>，通常包含两层 Linear 和一个激活函数：</p>
+<pre class="line-numbers language-none"><code class="language-none">input ──► Linear ──► 激活函数 ──► Linear ──► output
+                        ↑
+                   引入非线性<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span></span></code></pre>
+<p>传统 FFN主要使用 ReLU 激活，而现代模型（如 Qwen3）更倾向于使用 SwiGLU 激活，因为它在表达能力和训练稳定性上表现更好。</p>
+<p>SwiGLU 的详细介绍请看<a href="./activation.md#4-swiglu">这里</a>。</p>
+<hr>
+<h2 id="七、Attention-vs-MLP：分工与协作">七、Attention vs MLP：分工与协作</h2>
+<p><strong>Attention 负责&quot;看到&quot;上下文，MLP 负责&quot;理解&quot;看到的内容。两者互补，缺一不可。</strong></p>
+<h3 id="核心功能对比">核心功能对比</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>Attention</th>
+<th>MLP</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>主要功能</strong></td>
+<td>Token 间的信息交互</td>
+<td>每个 Token 的特征变换</td>
+</tr>
+<tr>
+<td><strong>作用范围</strong></td>
+<td>跨位置（全局）</td>
+<td>单位置（局部）</td>
+</tr>
+<tr>
+<td><strong>核心操作</strong></td>
+<td>加权聚合其他位置的信息</td>
+<td>非线性特征映射</td>
+</tr>
+<tr>
+<td><strong>类比</strong></td>
+<td>“开会讨论” — 收集他人意见</td>
+<td>“独立思考” — 处理消化信息</td>
+</tr>
+<tr>
+<td><strong>参数占比</strong></td>
+<td>~20-30%</td>
+<td>~70-80%</td>
+</tr>
+</tbody>
+</table>
+<h3 id="两者如何协作？">两者如何协作？</h3>
+<p>在每个 Transformer 层中，Attention 和 MLP <strong>串行配合</strong>：</p>
+<pre class="line-numbers language-none"><code class="language-none">输入 Token 表示
+       │
+       ▼
+┌─────────────────────────────────────────┐
+│  Attention: &quot;看看周围的 Token&quot;           │
+│                                          │
+│  - Q: 我需要什么信息？                    │
+│  - K: 其他位置有什么信息？                │
+│  - V: 取回相关信息                        │
+│  - 输出: 融合了上下文的表示               │
+└─────────────────────────────────────────┘
+       │
+       ▼ (+ 残差连接)
+       │
+       ▼
+┌─────────────────────────────────────────┐
+│  MLP: &quot;处理这些信息&quot;                      │
+│                                          │
+│  - 对每个位置独立做非线性变换             │
+│  - 提取更高层次的特征                     │
+│  - 注入&quot;世界知识&quot;（存储在权重中）         │
+│  - 输出: 更丰富的表示                     │
+└─────────────────────────────────────────┘
+       │
+       ▼ (+ 残差连接)
+       │
+       ▼
+输出 Token 表示<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<h3 id="为什么这种分工有效？">为什么这种分工有效？</h3>
+<p><strong>1. 信息流动 vs 信息处理</strong></p>
+<pre class="line-numbers language-none"><code class="language-none">Attention 只做&quot;加权平均&quot;，是线性操作（对 V 而言）
+→ 需要 MLP 的非线性来提升表达能力
+
+MLP 只看单个位置，无法获取上下文
+→ 需要 Attention 来收集其他位置的信息<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p><strong>2. &quot;知识存储&quot;的分工</strong></p>
+<p>研究表明：</p>
+<ul>
+<li><strong>Attention</strong>：主要学习&quot;如何组合信息&quot;（语法结构、指代关系等）</li>
+<li><strong>MLP</strong>：主要存储&quot;事实知识&quot;（巴黎是法国首都、水的化学式是 H₂O 等）</li>
+</ul>
+<p>这也是为什么 <strong>MLP 参数量远大于 Attention</strong> — 需要存储大量世界知识！</p>
+<p><strong>3. 层数堆叠的效果</strong></p>
+<pre class="line-numbers language-none"><code class="language-none">Layer 1:  Attention → MLP
+             ↓
+Layer 2:  Attention → MLP    每层都在前一层的基础上
+             ↓               进一步提取和抽象特征
+Layer 3:  Attention → MLP
+            ...
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<hr>
+<h2 id="八、完整的-Transformer-层">八、完整的 Transformer 层</h2>
+<p>把上面的组件组合起来，一个完整的 Transformer 层（Pre-Norm 架构）如下：</p>
+<pre class="line-numbers language-none"><code class="language-none">Input Hidden States
+        │
+        ▼
+   ┌─────────┐
+   │ RMSNorm │ ←── input_layernorm
+   └────┬────┘
+        │
+        ▼
+   ┌─────────────────────────────────────┐
+   │           Self-Attention             │
+   │  ┌─────────────────────────────┐    │
+   │  │ Q&#x2F;K&#x2F;V Proj ──► RoPE ──► Attn │    │
+   │  └─────────────────────────────┘    │
+   │               │                      │
+   │               ▼ O Proj               │
+   └─────────────────────────────────────┘
+        │
+        ├──────── + Residual ◄──────────────┐
+        │                                   │
+        ▼                                   │
+   ┌─────────┐                              │
+   │ RMSNorm │ ←── post_attention_layernorm │
+   └────┬────┘                              │
+        │                                   │
+        ▼                                   │
+   ┌─────────────────┐                      │
+   │      MLP        │                      │
+   │    (SwiGLU)     │                      │
+   └────────┬────────┘                      │
+            │                               │
+            ├──────── + Residual ◄──────────┘
+            │
+            ▼
+     Output Hidden States<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<hr>
+<h2 id="参考资料">参考资料</h2>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://github.com/wyann22/aios">AIOS: Build an LLM Inference Engine from Scratch</a></li>
+</ul>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://ihanzh.github.io">Han Zhang</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://ihanzh.github.io/2026/05/09/inference/llm-inference/">https://ihanzh.github.io/2026/05/09/inference/llm-inference/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="https://ihanzh.github.io" target="_blank">Han</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/LLM/">LLM</a><a class="post-meta__tags" href="/tags/inference/">inference</a></div><div class="post-share"><div class="social-share" data-image="/img/avatar.jpg" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2026/05/09/inference/normalization/" title="Normalization（归一化）"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">Normalization（归一化）</div></div><div class="info-2"><div class="info-item-1">在现代大语言模型（LLM）中，Normalization（归一化） 是一个至关重要的组件，主要负责稳定训练过程、加速收敛、提升模型性能。它的核心思想是对输入数据进行标准化处理，使其具有统一的分布特征，从而帮助模型更好地学习和泛化。 LayerNorm 详解 LayerNorm（Layer Normalization）是 Transformer 模型中最常用的归一化方法。它将输入的每个样本（通常是一个向量）进行归一化处理，使其均值为0，方差为1，并通过可学习的参数进行缩放和平移。 核心公式： 对于输入向量 $x = [x_1, x_2, …, x_d]$（d 是 hidden_size）： $$ \text{LayerNorm}(x) = \gamma \cdot \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}} + \beta $$ 其中：  $\mu = \frac{1}{d}\sum_{i=1}^{d} x_i$（均值） $\sigma^2 = \frac{1}{d}\sum_{i=1}^{d} (x_i - \mu)^2$（方差） $\g...</div></div></div></a><a class="pagination-related" href="/2026/05/09/inference/attention/" title="Attention（注意力机制）"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">Attention（注意力机制）</div></div><div class="info-2"><div class="info-item-1">在现代大语言模型（LLM）中，Attention（注意力机制） 是一个核心组件，负责捕捉输入序列中不同位置之间的依赖关系。它通过计算查询（Query）、键（Key）和值（Value）之间的相似度来动态地调整信息流，使得模型能够更有效地理解和生成文本。 模型中有三个重要的矩阵：  $W_Q$：将输入投影到查询空间的权重矩阵：（hidden_size, hidden_size） $W_K$：将输入投影到键空间的权重矩阵：（hidden_size, hidden_size） $W_V$：将输入投影到值空间的权重矩阵：（hidden_size, hidden_size）  Q、K、V 的直观理解 通过对输入序列进行线性变换，我们得到三个矩阵： 输入 $X$ 的形状为（batch, seq_len, hidden_size）：  $Q = X W_Q$：查询矩阵，形状为（batch, seq_len, hidden_size） $K = X W_K$：键矩阵，形状为（batch, seq_len, hidden_size） $V = X W_V$：值矩阵，形状为（batch, seq_le...</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/05/09/inference/rope/" title="RoPE（旋转位置编码）"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-05-09</div><div class="info-item-2">RoPE（旋转位置编码）</div></div><div class="info-2"><div class="info-item-1">RoPE（Rotary Position Embedding，旋转位置编码）是现代大语言模型（LLM）中一种非常流行的位置编码方案，其通过把位置信息&quot;旋转&quot;进 Q 和 K 向量中，使得两个位置 m 和 n 的向量点积自然包含它们的相对距离 (m-n)。   Step 1：计算 head_dim 维度上的旋转频率 inv_freq RoPE 的第一步是为 Q/K 向量的每个维度对分配一个旋转频率。 以 head_dim=128 为例，我们把 128 维向量分成 64 对，每对使用不同频率的 θ： θ₀ &#x3D; 1 &#x2F; base^(0&#x2F;128)    → 频率最高，旋转最快（捕捉近距离关系） θ₁ &#x3D; 1 &#x2F; base^(2&#x2F;128)    → θ₂ &#x3D; 1 &#x2F; base^(4&#x2F;128)    →   ... θ₆₃ &#x3D; 1 &#x2F; base^(126&#x2F;128)  → 频率最低，旋转最慢（捕捉远距离关系） 直觉：类似钟表——秒针转得快（高频，感知短间隔）...</div></div></div></a><a class="pagination-related" href="/2026/05/09/inference/normalization/" title="Normalization（归一化）"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-05-09</div><div class="info-item-2">Normalization（归一化）</div></div><div class="info-2"><div class="info-item-1">在现代大语言模型（LLM）中，Normalization（归一化） 是一个至关重要的组件，主要负责稳定训练过程、加速收敛、提升模型性能。它的核心思想是对输入数据进行标准化处理，使其具有统一的分布特征，从而帮助模型更好地学习和泛化。 LayerNorm 详解 LayerNorm（Layer Normalization）是 Transformer 模型中最常用的归一化方法。它将输入的每个样本（通常是一个向量）进行归一化处理，使其均值为0，方差为1，并通过可学习的参数进行缩放和平移。 核心公式： 对于输入向量 $x = [x_1, x_2, …, x_d]$（d 是 hidden_size）： $$ \text{LayerNorm}(x) = \gamma \cdot \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}} + \beta $$ 其中：  $\mu = \frac{1}{d}\sum_{i=1}^{d} x_i$（均值） $\sigma^2 = \frac{1}{d}\sum_{i=1}^{d} (x_i - \mu)^2$（方差） $\g...</div></div></div></a><a class="pagination-related" href="/2026/05/09/inference/tokenizer/" title="Tokenizer（子词切分）"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-05-09</div><div class="info-item-2">Tokenizer（子词切分）</div></div><div class="info-2"><div class="info-item-1">目前，大语言模型（GPT-4、LLaMA、Qwen、DeepSeek等）主流的 Tokenizer 方案，几乎清一色采用的是 基于子词（Subword）的算法。其中绝对的统治者是 BPE（Byte-Pair Encoding，字节对编码）。 1. 为什么不能直接按“词”或“字”切分？   按单词切（Word-level）：比如英语，如果有 run, running, runs，按照单词切，词表会大到爆炸（几百万个词），而且一旦遇到网上生造的新词（比如 ChatGPTing），词表里没有，模型就傻眼了（变成 &lt;UNK&gt; 未知词）。   按字母/单字切（Character-level）：词表确实小了（英文 26 个字母，中文几万个汉字），但一个普通的句子会被切成成百上千个字母，会导致前面提到的 n（序列长度）变得超级长，模型计算量直接算爆炸，而且单个字母本身没啥语义。   于是，目前的共识方案诞生了：子词切分（Subword Tokenization）。 它的核心哲学是：把高频词当成一个整体，把低频生僻词拆解成常见的词根或字母。  2. 目前的绝对主流方案：BPE（Byt...</div></div></div></a><a class="pagination-related" href="/2026/05/09/inference/attention/" title="Attention（注意力机制）"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-05-09</div><div class="info-item-2">Attention（注意力机制）</div></div><div class="info-2"><div class="info-item-1">在现代大语言模型（LLM）中，Attention（注意力机制） 是一个核心组件，负责捕捉输入序列中不同位置之间的依赖关系。它通过计算查询（Query）、键（Key）和值（Value）之间的相似度来动态地调整信息流，使得模型能够更有效地理解和生成文本。 模型中有三个重要的矩阵：  $W_Q$：将输入投影到查询空间的权重矩阵：（hidden_size, hidden_size） $W_K$：将输入投影到键空间的权重矩阵：（hidden_size, hidden_size） $W_V$：将输入投影到值空间的权重矩阵：（hidden_size, hidden_size）  Q、K、V 的直观理解 通过对输入序列进行线性变换，我们得到三个矩阵： 输入 $X$ 的形状为（batch, seq_len, hidden_size）：  $Q = X W_Q$：查询矩阵，形状为（batch, seq_len, hidden_size） $K = X W_K$：键矩阵，形状为（batch, seq_len, hidden_size） $V = X W_V$：值矩阵，形状为（batch, seq_le...</div></div></div></a><a class="pagination-related" href="/2026/05/09/inference/activation/" title="Activation（激活函数）"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-05-09</div><div class="info-item-2">Activation（激活函数）</div></div><div class="info-2"><div class="info-item-1">在现代大语言模型（LLM）中，Activation（激活函数） 是神经网络中引入非线性的关键组件。它的主要作用是帮助模型捕捉复杂的模式和关系，使得网络能够学习和表达更丰富的函数映射。 ReLU（Rectified Linear Unit） 最简单也最常用的激活函数： $$ \text{ReLU}(x) = \max(0, x) $$ 输入:  [-2, -1, 0, 1, 2] 输出:  [ 0,  0, 0, 1, 2] 优点：计算简单、梯度不会饱和（正区间） 缺点：负数区域梯度为0（&quot;死亡ReLU&quot;问题）  GELU（Gaussian Error Linear Unit BERT、GPT-2 等早期 Transformer 模型使用： $$ \text{GELU}(x) = x \cdot \Phi(x) $$ 其中 $\Phi(x)$ 是标准正态分布的累积分布函数。 特点：比 ReLU 更平滑，概率性地&quot;抑制&quot;输入  SiLU / Swish（现代 LLM 主流） Llama、Qwen、Mistral 等现代 LLM 使用： $$ \...</div></div></div></a></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.jpg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Han Zhang</div><div class="author-info-description">内核与虚拟化技术</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">19</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">30</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">8</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/ihanzh"><i class="fab fa-github"></i><span>Follow Me</span></a></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%80%E3%80%81%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5"><span class="toc-number">1.</span> <span class="toc-text">一、基本概念</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%8C%E3%80%81Tokenizer"><span class="toc-number">2.</span> <span class="toc-text">二、Tokenizer</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%89%E3%80%81Embedding"><span class="toc-number">3.</span> <span class="toc-text">三、Embedding</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%9B%9B%E3%80%81Normalization%EF%BC%88%E5%BD%92%E4%B8%80%E5%8C%96%EF%BC%89"><span class="toc-number">4.</span> <span class="toc-text">四、Normalization（归一化）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%94%E3%80%81%E6%B3%A8%E6%84%8F%E5%8A%9B%E6%9C%BA%E5%88%B6"><span class="toc-number">5.</span> <span class="toc-text">五、注意力机制</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#Linear-%E5%B1%82%E5%9F%BA%E7%A1%80%EF%BC%9A%E7%9F%A9%E9%98%B5%E4%B9%98%E6%B3%95"><span class="toc-number">5.1.</span> <span class="toc-text">Linear 层基础：矩阵乘法</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Attention%EF%BC%9A%E6%B3%A8%E6%84%8F%E5%8A%9B%E6%9C%BA%E5%88%B6"><span class="toc-number">5.2.</span> <span class="toc-text">Attention：注意力机制</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#%E5%A4%8D%E6%9D%82%E5%BA%A6%E5%88%86%E6%9E%90"><span class="toc-number">5.2.1.</span> <span class="toc-text">复杂度分析</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%BD%8D%E7%BD%AE%E7%BC%96%E7%A0%81"><span class="toc-number">5.3.</span> <span class="toc-text">位置编码</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%A6%82%E7%8E%87%E5%BD%92%E4%B8%80%E5%8C%96%EF%BC%9ASoftmax-%E5%87%BD%E6%95%B0"><span class="toc-number">5.4.</span> <span class="toc-text">概率归一化：Softmax 函数</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#Softmax-%E5%9C%A8-Attention-%E4%B8%AD%E7%9A%84%E4%BD%9C%E7%94%A8"><span class="toc-number">5.4.1.</span> <span class="toc-text">Softmax 在 Attention 中的作用</span></a></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%85%AD%E3%80%81MLP%EF%BC%88%E5%A4%9A%E5%B1%82%E6%84%9F%E7%9F%A5%E6%9C%BA%EF%BC%89"><span class="toc-number">6.</span> <span class="toc-text">六、MLP（多层感知机）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%83%E3%80%81Attention-vs-MLP%EF%BC%9A%E5%88%86%E5%B7%A5%E4%B8%8E%E5%8D%8F%E4%BD%9C"><span class="toc-number">7.</span> <span class="toc-text">七、Attention vs MLP：分工与协作</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%A0%B8%E5%BF%83%E5%8A%9F%E8%83%BD%E5%AF%B9%E6%AF%94"><span class="toc-number">7.1.</span> <span class="toc-text">核心功能对比</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%A4%E8%80%85%E5%A6%82%E4%BD%95%E5%8D%8F%E4%BD%9C%EF%BC%9F"><span class="toc-number">7.2.</span> <span class="toc-text">两者如何协作？</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%BF%99%E7%A7%8D%E5%88%86%E5%B7%A5%E6%9C%89%E6%95%88%EF%BC%9F"><span class="toc-number">7.3.</span> <span class="toc-text">为什么这种分工有效？</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%85%AB%E3%80%81%E5%AE%8C%E6%95%B4%E7%9A%84-Transformer-%E5%B1%82"><span class="toc-number">8.</span> <span class="toc-text">八、完整的 Transformer 层</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%8F%82%E8%80%83%E8%B5%84%E6%96%99"><span class="toc-number">9.</span> <span class="toc-text">参考资料</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/05/09/inference/activation/" title="Activation（激活函数）">Activation（激活函数）</a><time datetime="2026-05-09T01:00:00.000Z" title="发表于 2026-05-09 09:00:00">2026-05-09</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/05/09/inference/attention/" title="Attention（注意力机制）">Attention（注意力机制）</a><time datetime="2026-05-09T01:00:00.000Z" title="发表于 2026-05-09 09:00:00">2026-05-09</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/05/09/inference/llm-inference/" title="LLM 推理的基础框架知识">LLM 推理的基础框架知识</a><time datetime="2026-05-09T01:00:00.000Z" title="发表于 2026-05-09 09:00:00">2026-05-09</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/05/09/inference/normalization/" title="Normalization（归一化）">Normalization（归一化）</a><time datetime="2026-05-09T01:00:00.000Z" title="发表于 2026-05-09 09:00:00">2026-05-09</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/05/09/inference/tokenizer/" title="Tokenizer（子词切分）">Tokenizer（子词切分）</a><time datetime="2026-05-09T01:00:00.000Z" title="发表于 2026-05-09 09:00:00">2026-05-09</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2025 - 2026 By Han Zhang</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 8.1.1</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.5.4</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.5.4"></script><script src="/js/main.js?v=5.5.4"></script><div class="js-pjax"><script>(() => {
+  const parseViewBox = viewBox => {
+    if (!viewBox) return null
+    const parts = viewBox.trim().split(/[\s,]+/).map(n => Number(n))
+    if (parts.length !== 4 || parts.some(n => Number.isNaN(n))) return null
+    return parts
+  }
+
+  const getSvgViewBox = svg => {
+    const attr = parseViewBox(svg.getAttribute('viewBox'))
+    if (attr) return attr
+
+    // Fallback: use bbox to build a viewBox
+    try {
+      const bbox = svg.getBBox()
+      if (bbox && bbox.width && bbox.height) return [bbox.x, bbox.y, bbox.width, bbox.height]
+    } catch (e) {
+      // getBBox may fail on some edge cases; ignore
+    }
+
+    const w = Number(svg.getAttribute('width')) || 0
+    const h = Number(svg.getAttribute('height')) || 0
+    if (w > 0 && h > 0) return [0, 0, w, h]
+    return [0, 0, 100, 100]
+  }
+
+  const setSvgViewBox = (svg, vb) => {
+    svg.setAttribute('viewBox', `${vb[0]} ${vb[1]} ${vb[2]} ${vb[3]}`)
+  }
+
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
+
+  const openSvgInNewTab = ({ source, initViewBox }) => {
+    const getClonedSvg = () => {
+      if (typeof source === 'string') {
+        const template = document.createElement('template')
+        template.innerHTML = source.trim()
+        const svg = template.content.querySelector('svg')
+        return svg ? svg.cloneNode(true) : null
+      }
+      if (source && typeof source.cloneNode === 'function') {
+        return source.cloneNode(true)
+      }
+      return null
+    }
+
+    const clone = getClonedSvg()
+    if (!clone) return
+    if (initViewBox && initViewBox.length === 4) {
+      clone.setAttribute('viewBox', initViewBox.join(' '))
+    }
+    if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+    if (!clone.getAttribute('xmlns:xlink') && clone.outerHTML.includes('xlink:')) {
+      clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink')
+    }
+    // inject background to match current theme
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+    const bg = getComputedStyle(document.body).backgroundColor || (isDark ? '#1e1e1e' : '#ffffff')
+    if (!clone.style.background) clone.style.background = bg
+
+    const serializer = new XMLSerializer()
+    const svgSource = serializer.serializeToString(clone)
+    const htmlSource = `<!doctype html><html><head><meta charset="utf-8" />
+      <style>
+        html, body { width: 100%; height: 100%; margin: 0; display: flex; align-items: center; justify-content: center; background: ${bg}; }
+        svg { max-width: 100%; max-height: 100%; height: auto; width: auto; }
+      </style>
+      </head><body>${svgSource}</body></html>`
+    const blob = new Blob([htmlSource], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    window.open(url, '_blank', 'noopener')
+    setTimeout(() => URL.revokeObjectURL(url), 30000)
+  }
+
+  const attachMermaidViewerButton = wrap => {
+    let btn = wrap.querySelector('.mermaid-open-btn')
+    if (!btn) {
+      btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'mermaid-open-btn'
+      wrap.appendChild(btn)
+    }
+
+    btn.innerHTML = '<i class="fa fa-search fa-fw" aria-hidden="true"></i>'
+
+    if (!btn.__mermaidViewerBound) {
+      btn.addEventListener('click', e => {
+        e.preventDefault()
+        e.stopPropagation()
+        const svg = wrap.__mermaidOriginalSvg || wrap.querySelector('svg')
+        if (!svg) return
+        const initViewBox = wrap.__mermaidInitViewBox
+        if (typeof svg === 'string') {
+          openSvgInNewTab({ source: svg, initViewBox })
+          return
+        }
+        openSvgInNewTab({ source: svg, initViewBox })
+      })
+      btn.__mermaidViewerBound = true
+    }
+  }
+
+  // Zoom around a point (px, py) in the SVG viewport (in viewBox coordinates)
+  const zoomAtPoint = (vb, factor, px, py) => {
+    const w = vb[2] * factor
+    const h = vb[3] * factor
+    const nx = px - (px - vb[0]) * factor
+    const ny = py - (py - vb[1]) * factor
+    return [nx, ny, w, h]
+  }
+
+  const initMermaidGestures = wrap => {
+    const svg = wrap.querySelector('svg')
+    if (!svg) return
+
+    // Ensure viewBox exists so gestures always work
+    const initVb = getSvgViewBox(svg)
+    wrap.__mermaidInitViewBox = initVb
+    wrap.__mermaidCurViewBox = initVb.slice()
+    setSvgViewBox(svg, initVb)
+
+    // Avoid binding multiple times on themeChange/pjax
+    if (wrap.__mermaidGestureBound) return
+    wrap.__mermaidGestureBound = true
+
+    // Helper: map client (viewport) coordinate -> viewBox coordinate
+    const clientToViewBox = (clientX, clientY) => {
+      const rect = svg.getBoundingClientRect()
+      const vb = wrap.__mermaidCurViewBox || getSvgViewBox(svg)
+      const x = vb[0] + (clientX - rect.left) * (vb[2] / rect.width)
+      const y = vb[1] + (clientY - rect.top) * (vb[3] / rect.height)
+      return { x, y, rect, vb }
+    }
+
+    const state = {
+      pointers: new Map(),
+      startVb: null,
+      startDist: 0,
+      startCenter: null
+    }
+
+    const clampVb = vb => {
+      const init = wrap.__mermaidInitViewBox || vb
+      const minW = init[2] * 0.1
+      const maxW = init[2] * 10
+      const minH = init[3] * 0.1
+      const maxH = init[3] * 10
+      vb[2] = clamp(vb[2], minW, maxW)
+      vb[3] = clamp(vb[3], minH, maxH)
+      return vb
+    }
+
+    const setCurVb = vb => {
+      vb = clampVb(vb)
+      wrap.__mermaidCurViewBox = vb
+      setSvgViewBox(svg, vb)
+    }
+
+    const onPointerDown = e => {
+      // Allow only primary button for mouse
+      if (e.pointerType === 'mouse' && e.button !== 0) return
+      svg.setPointerCapture(e.pointerId)
+      state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+      if (state.pointers.size === 1) {
+        state.startVb = (wrap.__mermaidCurViewBox || getSvgViewBox(svg)).slice()
+      } else if (state.pointers.size === 2) {
+        const pts = [...state.pointers.values()]
+        const dx = pts[0].x - pts[1].x
+        const dy = pts[0].y - pts[1].y
+        state.startDist = Math.hypot(dx, dy)
+        state.startVb = (wrap.__mermaidCurViewBox || getSvgViewBox(svg)).slice()
+        state.startCenter = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 }
+      }
+    }
+
+    const onPointerMove = e => {
+      if (!state.pointers.has(e.pointerId)) return
+      state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+      // Pan with 1 pointer
+      if (state.pointers.size === 1 && state.startVb) {
+        const p = [...state.pointers.values()][0]
+        const prev = { x: e.clientX - e.movementX, y: e.clientY - e.movementY }
+        // movementX/Y unreliable on touch, compute from stored last position
+        const last = wrap.__mermaidLastSinglePointer || p
+        const dxClient = p.x - last.x
+        const dyClient = p.y - last.y
+        wrap.__mermaidLastSinglePointer = p
+
+        const { rect } = clientToViewBox(p.x, p.y)
+        const vb = (wrap.__mermaidCurViewBox || getSvgViewBox(svg)).slice()
+        const dx = dxClient * (vb[2] / rect.width)
+        const dy = dyClient * (vb[3] / rect.height)
+        setCurVb([vb[0] - dx, vb[1] - dy, vb[2], vb[3]])
+        return
+      }
+
+      // Pinch zoom with 2 pointers
+      if (state.pointers.size === 2 && state.startVb && state.startDist > 0) {
+        const pts = [...state.pointers.values()]
+        const dx = pts[0].x - pts[1].x
+        const dy = pts[0].y - pts[1].y
+        const dist = Math.hypot(dx, dy)
+        if (!dist) return
+        const factor = state.startDist / dist // dist bigger => zoom in (viewBox smaller)
+
+        const cx = (pts[0].x + pts[1].x) / 2
+        const cy = (pts[0].y + pts[1].y) / 2
+        const centerClient = { x: cx, y: cy }
+
+        const pxy = clientToViewBox(centerClient.x, centerClient.y)
+        const cpx = pxy.x
+        const cpy = pxy.y
+
+        const vb = zoomAtPoint(state.startVb, factor, cpx, cpy)
+        setCurVb(vb)
+      }
+    }
+
+    const onPointerUpOrCancel = e => {
+      state.pointers.delete(e.pointerId)
+      if (state.pointers.size === 0) {
+        state.startVb = null
+        state.startDist = 0
+        state.startCenter = null
+        wrap.__mermaidLastSinglePointer = null
+      } else if (state.pointers.size === 1) {
+        // reset single pointer baseline to avoid jump
+        wrap.__mermaidLastSinglePointer = [...state.pointers.values()][0]
+      }
+    }
+
+    // Wheel zoom (mouse/trackpad)
+    const onWheel = e => {
+      // ctrlKey on mac trackpad pinch; we treat both as zoom
+      e.preventDefault()
+      const delta = e.deltaY
+      const zoomFactor = delta > 0 ? 1.1 : 0.9
+      const { x, y } = clientToViewBox(e.clientX, e.clientY)
+      const vb = (wrap.__mermaidCurViewBox || getSvgViewBox(svg)).slice()
+      setCurVb(zoomAtPoint(vb, zoomFactor, x, y))
+    }
+
+    const onDblClick = () => {
+      const init = wrap.__mermaidInitViewBox
+      if (!init) return
+      wrap.__mermaidCurViewBox = init.slice()
+      setSvgViewBox(svg, init)
+    }
+
+    svg.addEventListener('pointerdown', onPointerDown)
+    svg.addEventListener('pointermove', onPointerMove)
+    svg.addEventListener('pointerup', onPointerUpOrCancel)
+    svg.addEventListener('pointercancel', onPointerUpOrCancel)
+    svg.addEventListener('wheel', onWheel, { passive: false })
+    svg.addEventListener('dblclick', onDblClick)
+  }
+
+  const runMermaid = ele => {
+    window.loadMermaid = true
+    const theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default'
+
+    ele.forEach((item, index) => {
+      const mermaidSrc = item.firstElementChild
+
+      // Clear old render (themeChange/pjax will rerun)
+      const oldSvg = item.querySelector('svg')
+      if (oldSvg) oldSvg.remove()
+      item.__mermaidGestureBound = false
+
+      const config = mermaidSrc.dataset.config ? JSON.parse(mermaidSrc.dataset.config) : {}
+      if (!config.theme) {
+        config.theme = theme
+      }
+      const mermaidThemeConfig = `%%{init: ${JSON.stringify(config)}}%%\n`
+      const mermaidID = `mermaid-${index}`
+      const mermaidDefinition = mermaidThemeConfig + mermaidSrc.textContent
+
+      const renderFn = mermaid.render(mermaidID, mermaidDefinition)
+      const renderMermaid = svg => {
+        mermaidSrc.insertAdjacentHTML('afterend', svg)
+        if (true) initMermaidGestures(item)
+        item.__mermaidOriginalSvg = svg
+        if (true) attachMermaidViewerButton(item)
+      }
+
+
+      // mermaid v9 and v10 compatibility
+      typeof renderFn === 'string' ? renderMermaid(renderFn) : renderFn.then(({ svg }) => renderMermaid(svg))
+    })
+  }
+
+  const codeToMermaid = () => {
+    const codeMermaidEle = document.querySelectorAll('pre > code.mermaid')
+    if (codeMermaidEle.length === 0) return
+
+    codeMermaidEle.forEach(ele => {
+      const preEle = document.createElement('pre')
+      preEle.className = 'mermaid-src'
+      preEle.hidden = true
+      preEle.textContent = ele.textContent
+      const newEle = document.createElement('div')
+      newEle.className = 'mermaid-wrap'
+      newEle.appendChild(preEle)
+      ele.parentNode.replaceWith(newEle)
+    })
+  }
+
+  const loadMermaid = () => {
+    if (true) codeToMermaid()
+    const $mermaid = document.querySelectorAll('#article-container .mermaid-wrap')
+    if ($mermaid.length === 0) return
+
+    const runMermaidFn = () => runMermaid($mermaid)
+    btf.addGlobalFn('themeChange', runMermaidFn, 'mermaid')
+    window.loadMermaid ? runMermaidFn() : btf.getScript('https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.min.js').then(runMermaidFn)
+  }
+
+  btf.addGlobalFn('encrypt', loadMermaid, 'mermaid')
+  window.pjax ? loadMermaid() : document.addEventListener('DOMContentLoaded', loadMermaid)
+})()</script></div><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>
